@@ -12,7 +12,8 @@ import { PageError, PageLoading } from '../ui/StateViews';
 import { useProperty } from '../../hooks/useProperties';
 import { useBack } from '../../hooks/useNavigation';
 import { useToast } from '../../context/ToastContext';
-import { SPECS } from '../../lib/catalog';
+import { LiveMap } from '../ui/LiveMap';
+import { SPECS, cityCenter } from '../../lib/catalog';
 import { cx } from '../../lib/format';
 import { mapsUrl, propertyArea, propertyLocality } from '../../lib/property';
 import type { NearbyPlace } from '../../types/property';
@@ -169,9 +170,14 @@ export function LocationView({ id }: { id: string }) {
           </Card>
         )) : <Card className="p-4 text-[13.5px] text-ink-500">Nearby places and location advantages haven&apos;t been added for {propertyLocality(p) || 'this property'} yet.</Card>}
       </div>
-      <div className="rounded-2xl overflow-hidden border border-ink-200 bg-map relative mt-4" style={{ height: 200 }}>
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"><div className="w-10 h-10 rounded-full bg-brand-600 grid place-items-center shadow-lg ring-4 ring-white"><Icon name="map-pin" size={20} color="#fff" /></div></div>
-        <a href={mapsUrl(p)} target="_blank" rel="noopener noreferrer" className="absolute bottom-3 right-3 bg-white rounded-lg px-3 h-9 text-[12.5px] font-semibold text-ink-800 flex items-center gap-1.5 shadow-sm hover:bg-ink-50"><Icon name="map" size={14} color="#1A6FFF" />Open map</a>
+      <div className="relative mt-4">
+        <LiveMap
+          height={240}
+          className="rounded-2xl border border-ink-200"
+          pins={typeof p.address?.latitude === 'number' && typeof p.address?.longitude === 'number' ? [{ id: p._id, latitude: p.address.latitude, longitude: p.address.longitude }] : []}
+          center={cityCenter(p.address?.city)}
+        />
+        <a href={mapsUrl(p)} target="_blank" rel="noopener noreferrer" className="absolute bottom-3 right-14 z-10 bg-white rounded-lg px-3 h-9 text-[12.5px] font-semibold text-ink-800 flex items-center gap-1.5 shadow-sm hover:bg-ink-50"><Icon name="map" size={14} color="#1A6FFF" />Open map</a>
       </div>
       <div className="grid grid-cols-2 gap-3 mt-4">
         <Button variant="outline" icon="scan" onClick={() => router.push(`/properties/${p._id}/vr-tour`)}>VR walk</Button>

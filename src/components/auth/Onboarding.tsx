@@ -21,13 +21,14 @@ import { sendCustomerOtp, verifyCustomerOtp } from '../../services/authService';
 import { updateMe } from '../../services/userService';
 import { uploadDocument } from '../../services/documentService';
 import { errorMessage } from '../../services/api';
-import { CITIES, ONBOARDING_SLIDES } from '../../lib/catalog';
+import { LiveMap } from '../ui/LiveMap';
+import { CITIES, ONBOARDING_SLIDES, cityCenter } from '../../lib/catalog';
 import { reverseGeocode } from '../../services/geoService';
 import { cx, digits, firstName, initials } from '../../lib/format';
 import type { CustomerRole, UserType } from '../../types/user';
 
 type Stage = 'splash' | 'intro' | 'login' | 'otp' | 'terms' | 'setup' | 'prefs' | 'success';
-type Geo = { status: 'idle' | 'locating' | 'done' | 'denied' | 'unsupported'; accuracy?: number };
+type Geo = { status: 'idle' | 'locating' | 'done' | 'denied' | 'unsupported'; accuracy?: number; latitude?: number; longitude?: number };
 
 const ROLES: Array<[string, string, string, CustomerRole, UserType]> = [
   ['Buyer', 'search', 'Looking to buy a home', 'buyer', 'resident'],
@@ -110,7 +111,12 @@ export function Onboarding({ startStage }: { startStage?: string }) {
   });
   const finish = () => run(async () => {
     const role = ROLES.find(([r]) => r === form.role) ?? ROLES[0]!;
-    setUser(await updateMe({ city: form.city, role: role[3], userType: role[4] }));
+    setUser(await updateMe({
+      city: form.city,
+      role: role[3],
+      userType: role[4],
+      ...(geo.latitude != null && geo.longitude != null ? { latitude: geo.latitude, longitude: geo.longitude } : {}),
+    }));
     setStage('success');
   });
   const onPhoto = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -130,7 +136,7 @@ export function Onboarding({ startStage }: { startStage?: string }) {
       (pos) => {
         void reverseGeocode(pos.coords.latitude, pos.coords.longitude).then((place) => {
           setForm((o) => ({ ...o, city: place.city }));
-          setGeo({ status: 'done', accuracy: Math.round(pos.coords.accuracy) });
+          setGeo({ status: 'done', accuracy: Math.round(pos.coords.accuracy), latitude: pos.coords.latitude, longitude: pos.coords.longitude });
           toast(`Location detected · ${place.city}`, 'map-pin');
         }).catch(() => setGeo({ status: 'denied' }));
       },
@@ -298,6 +304,12 @@ export function Onboarding({ startStage }: { startStage?: string }) {
             </div>
             <div className="mt-3"><div className="text-[11.5px] text-ink-400 mb-1.5">Popular cities</div><div className="flex flex-wrap gap-2">{CITIES.slice(0, 6).map((c) => <Pill key={c} active={form.city === c} onClick={() => pickCity(c)}>{c}</Pill>)}</div></div>
             <div className="text-[12.5px] text-ink-500 mt-3">Selected city: <b className="text-ink-900">{form.city}</b></div>
+            <LiveMap
+              height={180}
+              className="rounded-2xl border border-ink-200 mt-3"
+              pins={geo.latitude != null && geo.longitude != null ? [{ id: 'me', latitude: geo.latitude, longitude: geo.longitude, label: 'You' }] : []}
+              center={(geo.latitude != null && geo.longitude != null ? { latitude: geo.latitude, longitude: geo.longitude } : null) ?? cityCenter(form.city)}
+            />
             <div className="text-[13px] font-bold text-ink-800 mt-6 mb-2">I am a</div>
             <div className="grid grid-cols-2 gap-2.5">{ROLES.map(([r, ic, sub]) => (
               <button type="button" key={r} onClick={() => setForm((o) => ({ ...o, role: r }))} className={cx('rounded-2xl border p-3.5 text-left transition', form.role === r ? 'border-brand-600 bg-brand-50 ring-2 ring-brand-100' : 'border-ink-200 hover:border-brand-300')}>

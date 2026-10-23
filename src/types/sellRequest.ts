@@ -30,6 +30,7 @@ export interface SellSpecifications {
   facing?: string;
   furnishing?: string;
   parking?: number | null;
+  parkingType?: string | null;
   [key: string]: unknown;
 }
 

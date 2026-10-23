@@ -73,13 +73,23 @@ export const SUBTYPES: Record<string, string[]> = {
   apartment: ['Studio', 'Builder Floor', 'Penthouse', 'Standalone', 'Gated Community'],
   villa: ['Independent Villa', 'Row House', 'Twin Villa'],
   commercial: ['Office Space', 'Shop / Showroom', 'Warehouse', 'Co-working'],
-  default: ['Standalone', 'Gated Community', 'Other'],
+  plot: ['Residential Plot', 'Commercial Plot', 'Agricultural'],
+  land: ['Agricultural', 'Residential Zone', 'Industrial'],
+  fractional: ['Apartment Share', 'Villa Share', 'Commercial Share'],
+  interior: ['Full Home', 'Kitchen', 'Living', 'Bedroom', 'Office'],
+  nri: ['Apartment', 'Villa', 'Plot'],
+  farmhouse: ['Farmhouse', 'Weekend Home'],
+  holiday: ['Beach Home', 'Hill Home', 'City Home'],
+  'ceo-mansion': ['Mansion', 'Estate'],
+  organic: ['Organic Home', 'Eco Villa'],
+  '3d-print': ['Printed Home', 'Modular Print'],
 };
 export const BHKS = ['1 BHK', '2 BHK', '3 BHK', '4 BHK', '5+ BHK', 'Studio'];
 export const AGES = ['Under Construction', '0–1 year', '1–5 years', '5–10 years', '10+ years'];
 export const FACINGS = ['North', 'South', 'East', 'West'];
 export const OWNERSHIPS = ['Freehold', 'Leasehold', 'Co-op', 'Power of Attorney'];
 export const FURNISHINGS = ['Unfurnished', 'Semi-Furnished', 'Furnished'];
+export const PARKING_TYPES = ['Covered', 'Open', 'Stilt'];
 
 export const AUTH_FEATURES: Array<[string, string, string]> = [
   ['shield-check', 'Only verified homes', 'Every listing passes legal, title and on-site checks before it goes live.'],
@@ -115,6 +125,11 @@ export const CITY_COORDS: Record<string, [number, number]> = {
   Chennai: [13.08, 80.27], Bengaluru: [12.97, 77.59], Hyderabad: [17.38, 78.48], Mumbai: [19.07, 72.87], Pune: [18.52, 73.85], 'Delhi NCR': [28.61, 77.21],
 };
 export const CITIES = ['Chennai', 'Bengaluru', 'Hyderabad', 'Mumbai', 'Pune', 'Delhi NCR', 'Kolkata', 'Ahmedabad', 'Kochi', 'Coimbatore', 'Jaipur', 'Chandigarh'];
+export const cityCenter = (city?: string | null) => {
+  if (!city) return null;
+  const hit = CITY_COORDS[city] ?? Object.entries(CITY_COORDS).find(([name]) => name.toLowerCase() === city.toLowerCase())?.[1];
+  return hit ? { latitude: hit[0], longitude: hit[1] } : null;
+};
 export const nearestCity = (lat: number, lon: number) => {
   let best = 'Chennai', min = Infinity;
   for (const [c, [la, lo]] of Object.entries(CITY_COORDS)) { const d = (la - lat) ** 2 + (lo - lon) ** 2; if (d < min) { min = d; best = c; } }

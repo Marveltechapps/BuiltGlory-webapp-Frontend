@@ -101,6 +101,13 @@ svg.bg-ic { transform-origin: center; }
     radial-gradient(circle at 50% 90%, #FAEED5 0%, transparent 40%),
     linear-gradient(135deg, #EAF0F6, #DDE6EE);
 }
+.live-map { isolation: isolate; }
+.live-map .leaflet-container { height: 100%; width: 100%; background: #e8eef4; font-family: inherit; }
+.live-map .leaflet-marker-icon { background: none !important; border: none !important; }
+.live-map .leaflet-bottom.leaflet-right { right: auto; left: 0; }
+.live-map .leaflet-control-attribution { font-size: 10px; background: rgba(255,255,255,.85); }
+.live-map .leaflet-top, .live-map .leaflet-bottom { z-index: 2; }
+.live-map .leaflet-pane { z-index: 1; }
 .bg-map::before {
   content: ''; position: absolute; inset: 0;
   background:

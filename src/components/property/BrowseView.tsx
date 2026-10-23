@@ -10,13 +10,13 @@ import { PropCard } from '../ui/PropCard';
 import { Loading, ErrorState } from '../ui/StateViews';
 import { useApiQuery } from '../../hooks/useApiQuery';
 import { listProperties } from '../../services/propertyService';
-import { PROPERTY_TYPES, typeById } from '../../lib/catalog';
+import { LiveMap } from '../ui/LiveMap';
+import { PROPERTY_TYPES, cityCenter, typeById } from '../../lib/catalog';
 import { cx, formatINR } from '../../lib/format';
 import { propertyArea, propertyCity } from '../../lib/property';
 import type { Property, PropertyListQuery } from '../../types/property';
 
 type Sort = 'relevance' | 'low' | 'high' | 'area';
-const PIN_FALLBACK = [{ x: 26, y: 30 }, { x: 62, y: 22 }, { x: 44, y: 52 }, { x: 74, y: 60 }, { x: 30, y: 70 }, { x: 55, y: 78 }, { x: 82, y: 40 }];
 
 function FilterGroup({ title, children }: { title: string; children: ReactNode }) {
   return <div className="py-5 border-b border-ink-100 last:border-0"><div className="text-[13px] font-bold text-ink-800 mb-3">{title}</div>{children}</div>;
@@ -32,18 +32,6 @@ function Check({ on, onClick, label, right }: { on: boolean; onClick: () => void
     </button>
   );
 }
-
-/** Lat/lng → % position inside the map box; falls back to the design's pin layout. */
-const pinPositions = (list: Property[]) => {
-  const pts = list.map((p) => [p.address?.latitude, p.address?.longitude] as const);
-  const valid = pts.filter((x): x is readonly [number, number] => typeof x[0] === 'number' && typeof x[1] === 'number');
-  if (valid.length < 2) return list.map((_, i) => PIN_FALLBACK[i % 7]!);
-  const lats = valid.map((v) => v[0]), lngs = valid.map((v) => v[1]);
-  const [minLat, maxLat, minLng, maxLng] = [Math.min(...lats), Math.max(...lats), Math.min(...lngs), Math.max(...lngs)];
-  return pts.map(([lat, lng], i) => (typeof lat === 'number' && typeof lng === 'number'
-    ? { x: 12 + ((lng - minLng) / (maxLng - minLng || 1)) * 76, y: 18 + (1 - (lat - minLat) / (maxLat - minLat || 1)) * 66 }
-    : PIN_FALLBACK[i % 7]!));
-};
 
 export function BrowseView({ initialType, initialSearch }: { initialType?: string; initialSearch?: string }) {
   const router = useRouter();
@@ -102,7 +90,11 @@ export function BrowseView({ initialType, initialSearch }: { initialType?: strin
     </PageWrap>
   );
 
-  const pins = pinPositions(list);
+  const pins = list.flatMap((p) => {
+    const latitude = p.address?.latitude;
+    const longitude = p.address?.longitude;
+    return typeof latitude === 'number' && typeof longitude === 'number' ? [{ id: p._id, latitude, longitude, label: formatINR(p.price) }] : [];
+  });
   return (
     <PageWrap className="!max-w-[1320px]">
       <button type="button" onClick={() => setPicked(false)} className="flex items-center gap-2 text-[13px] font-semibold text-ink-500 hover:text-brand-600 mb-4"><Icon name="arrow-left" size={15} />Change property type</button>
@@ -157,15 +149,9 @@ export function BrowseView({ initialType, initialSearch }: { initialType?: strin
           {query.loading && !query.data ? <Loading label="Loading properties" />
             : query.error ? <ErrorState message={query.error} onRetry={query.reload} />
             : view === 'map' ? (
-              <div className="relative rounded-2xl overflow-hidden border border-ink-200 bg-map" style={{ height: 560 }}>
-                {list.map((p, i) => {
-                  const pos = pins[i] ?? PIN_FALLBACK[0]!;
-                  return <button type="button" key={p._id} onClick={() => open(p)} className="absolute -translate-x-1/2 -translate-y-full group" style={{ left: `${pos.x}%`, top: `${pos.y}%` }}>
-                    <div className="px-2.5 py-1 rounded-full bg-brand-600 text-white text-[12px] font-bold shadow-lg group-hover:bg-ink-900 transition whitespace-nowrap">{formatINR(p.price)}</div>
-                    <div className="w-2 h-2 bg-brand-600 rotate-45 mx-auto -mt-1 group-hover:bg-ink-900"></div>
-                  </button>;
-                })}
-                <div className="absolute top-4 left-4 bg-white rounded-xl shadow px-3 py-2 text-[12.5px] font-semibold text-ink-700">{list.length} properties on map</div>
+              <div className="relative">
+                <LiveMap height={560} className="rounded-2xl border border-ink-200" pins={pins} center={cities.length === 1 ? cityCenter(cities[0]) : null} onPinClick={(id) => { const p = list.find((item) => item._id === id); if (p) open(p); }} />
+                <div className="absolute top-4 left-4 z-10 bg-white rounded-xl shadow px-3 py-2 text-[12.5px] font-semibold text-ink-700">{pins.length} of {list.length} on the map{pins.length < list.length ? ' · some listings have no coordinates' : ''}</div>
               </div>
             ) : (
               <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-5">

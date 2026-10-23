@@ -14,7 +14,8 @@ import { useBack } from '../../hooks/useNavigation';
 import { useSession } from '../../context/SessionContext';
 import { useToast } from '../../context/ToastContext';
 import { supportContact, useAppConfig } from '../../context/AppConfigContext';
-import { amenityIcon, typeLabel } from '../../lib/catalog';
+import { LiveMap } from '../ui/LiveMap';
+import { amenityIcon, cityCenter, typeLabel } from '../../lib/catalog';
 import { cx, emi, formatINR, timeAgo } from '../../lib/format';
 import { floorLabel, isVerified, mapsUrl, pricePerSqft, propertyArea, propertyBhk, propertyLocation, propertyPhotos, specRows, unitNumber } from '../../lib/property';
 import { shareLink } from '../../lib/share';
@@ -210,9 +211,14 @@ export function PropertyDetail({ id }: { id: string }) {
               </div>
             ) : <p className="text-[13.5px] text-ink-500">A floor plan hasn&apos;t been uploaded for this property yet.</p>)}
             {tab === 'location' && (
-              <div className="rounded-2xl overflow-hidden border border-ink-200 bg-map relative" style={{ height: 320 }}>
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-full"><div className="w-9 h-9 rounded-full bg-brand-600 grid place-items-center shadow-lg ring-4 ring-white"><Icon name="home" size={16} color="#fff" /></div></div>
-                <div className="absolute bottom-4 left-4 right-4 bg-white rounded-xl p-3 flex items-center gap-3 shadow"><Icon name="map-pin" size={18} color="#1A6FFF" /><div className="text-[13px] font-semibold text-ink-800">{propertyLocation(p) || 'Location on request'}</div><a href={mapsUrl(p)} target="_blank" rel="noopener noreferrer" className="ml-auto text-[12px] text-brand-600 font-semibold cursor-pointer">Get directions</a></div>
+              <div>
+                <LiveMap
+                  height={320}
+                  className="rounded-2xl border border-ink-200"
+                  pins={typeof p.address?.latitude === 'number' && typeof p.address?.longitude === 'number' ? [{ id: p._id, latitude: p.address.latitude, longitude: p.address.longitude, label: 'Home' }] : []}
+                  center={cityCenter(p.address?.city)}
+                />
+                <div className="mt-3 bg-white rounded-xl border border-ink-200 p-3 flex items-center gap-3"><Icon name="map-pin" size={18} color="#1A6FFF" /><div className="text-[13px] font-semibold text-ink-800">{propertyLocation(p) || 'Location on request'}</div><a href={mapsUrl(p)} target="_blank" rel="noopener noreferrer" className="ml-auto text-[12px] text-brand-600 font-semibold cursor-pointer whitespace-nowrap">Get directions</a></div>
               </div>
             )}
           </div>

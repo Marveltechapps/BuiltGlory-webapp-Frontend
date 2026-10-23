@@ -18,7 +18,9 @@ import { uploadDocument } from '../../services/documentService';
 import { updateMe } from '../../services/userService';
 import { reverseGeocode } from '../../services/geoService';
 import { errorMessage } from '../../services/api';
-import { AGES, BHKS, FACINGS, FURNISHINGS, OWNERSHIPS, PROPERTY_TYPES, SELL_AMENITIES, SUBTYPES, typeById } from '../../lib/catalog';
+import { LiveMap } from '../ui/LiveMap';
+import { AGES, BHKS, FACINGS, FURNISHINGS, OWNERSHIPS, PARKING_TYPES, PROPERTY_TYPES, SELL_AMENITIES, SUBTYPES, cityCenter, typeById } from '../../lib/catalog';
+import { AREA_MIN, PRICE_MIN, basicReady, detailsReady, sellKind } from '../../lib/sellCategory';
 import { cx, formatINR } from '../../lib/format';
 import type { MarketEstimate, SellRequestPayload } from '../../types/sellRequest';
 
@@ -29,7 +31,8 @@ const GRADS = ['from-red-400 to-rose-400', 'from-blue-400 to-indigo-500', 'from-
 
 interface Form {
   title: string; subType: string; bhk: string; builtup: string; carpet: string; floor: string; totalFloors: string; unit: string; age: string;
-  building: string; area: string; city: string; pincode: string; facing: string; ownership: string; furnishing: string; parking: number;
+  plotArea: string; share: string; totalValue: string; scope: string; suitableFor: string; roadWidth: string; approval: string; furnishDetails: string;
+  building: string; area: string; city: string; pincode: string; facing: string; ownership: string; furnishing: string; parking: number; parkingType: string;
   price: string; negotiable: boolean;
 }
 interface Photo { key: string; url?: string; preview: string; uploading: boolean }
@@ -70,7 +73,8 @@ export function SellWizard() {
   const [picking, setPicking] = useState(true);
   const [f, setF] = useState<Form>({
     title: '', subType: '', bhk: '3 BHK', builtup: '', carpet: '', floor: '', totalFloors: '', unit: '', age: '1–5 years',
-    building: '', area: '', city: user?.city || 'Chennai', pincode: '', facing: 'East', ownership: 'Freehold', furnishing: 'Unfurnished', parking: 1,
+    plotArea: '', share: '', totalValue: '', scope: '', suitableFor: '', roadWidth: '', approval: '', furnishDetails: '',
+    building: '', area: '', city: user?.city || 'Chennai', pincode: '', facing: 'East', ownership: 'Freehold', furnishing: 'Unfurnished', parking: 1, parkingType: '',
     price: '', negotiable: true,
   });
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -85,19 +89,21 @@ export function SellWizard() {
   const set = (k: keyof Form) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF((o) => ({ ...o, [k]: e.target.value }));
   const toggleA = (a: string) => setAmens((s) => { const x = new Set(s); if (x.has(a)) x.delete(a); else x.add(a); return x; });
   const typeObj = typeById(type) ?? PROPERTY_TYPES[1]!;
-  const subList = SUBTYPES[type ?? ''] ?? SUBTYPES.default ?? [];
+  const kind = sellKind(typeObj.api);
+  const subList = SUBTYPES[type ?? ''] ?? [];
   const priceNum = n(f.price);
-  const areaNum = n(f.builtup);
+  const areaNum = kind === 'plot' ? n(f.plotArea) : n(f.builtup) || n(f.plotArea);
   const perSqft = priceNum && areaNum ? Math.round(priceNum / areaNum) : 0;
   const uploaded = photos.filter((p) => p.url);
-  const isPlot = typeObj.api === 'plot' || typeObj.api === 'land';
+  const furnished = f.furnishing.toLowerCase() !== 'unfurnished';
+  const checks = { ...f };
   const canNext = [
-    f.title.trim().length >= MIN_TITLE && f.builtup.trim() && f.floor.trim(),
+    basicReady(kind, checks, MIN_TITLE),
     f.building.trim().length >= 3 && /^\d{6}$/.test(f.pincode.trim()),
-    Boolean(f.facing && f.ownership),
+    detailsReady(kind, checks),
     amens.size > 0,
     uploaded.length >= MIN_PHOTOS && !photos.some((p) => p.uploading),
-    priceNum >= 50000,
+    priceNum >= PRICE_MIN,
   ][step];
 
   const payload = (): SellRequestPayload => ({
@@ -111,20 +117,43 @@ export function SellWizard() {
     },
     specifications: {
       subType: f.subType || undefined,
-      bhk: f.bhk.replace(/\s*BHK$/, ''),
-      builtUpArea: areaNum || null,
-      ...(isPlot ? { plotArea: areaNum || null } : {}),
-      carpetArea: n(f.carpet) || null,
-      floor: f.floor.trim() || null,
-      totalFloors: n(f.totalFloors) || null,
-      unitNo: f.unit.trim() || undefined,
-      propertyAge: f.age,
-      facing: f.facing,
-      furnishing: f.furnishing,
-      parking: f.parking,
+      ...(kind === 'home' ? {
+        bhk: f.bhk.replace(/\s*BHK$/, ''),
+        builtUpArea: n(f.builtup) || null,
+        carpetArea: n(f.carpet) || null,
+        floor: f.floor.trim() || null,
+        totalFloors: n(f.totalFloors) || null,
+        unitNo: f.unit.trim() || undefined,
+        propertyAge: f.age,
+        facing: f.facing,
+        furnishing: f.furnishing,
+        ...(furnished && f.furnishDetails.trim() ? { furnishDetails: f.furnishDetails.trim() } : {}),
+        parking: f.parking,
+        ...(f.parking > 0 && f.parkingType ? { parkingType: f.parkingType } : {}),
+      } : {}),
+      ...(kind === 'plot' ? {
+        plotArea: n(f.plotArea) || null,
+        facing: f.facing,
+        ...(n(f.roadWidth) >= 3 ? { roadWidth: n(f.roadWidth) } : {}),
+        ...(f.approval ? { approvalType: f.approval } : {}),
+      } : {}),
+      ...(kind === 'commercial' ? {
+        commercialType: f.suitableFor || undefined,
+        builtUpArea: n(f.builtup) || null,
+        plotArea: n(f.plotArea) || null,
+        floor: f.floor.trim() || null,
+        facing: f.facing,
+        parking: f.parking,
+        ...(f.parking > 0 && f.parkingType ? { parkingType: f.parkingType } : {}),
+      } : {}),
+      ...(kind === 'fractional' ? {
+        sharePercentage: Number(f.share) || null,
+        totalPropertyValue: n(f.totalValue) || null,
+      } : {}),
+      ...(kind === 'interior' ? { scopeOfWork: f.scope.trim() || undefined } : {}),
     },
     amenities: [...amens],
-    ownershipType: f.ownership,
+    ...(kind === 'interior' ? {} : { ownershipType: f.ownership }),
     photos: uploaded.map((p) => p.url as string),
     draftStep: step + 1,
   });
@@ -179,18 +208,28 @@ export function SellWizard() {
     setStep(step + 1);
   });
 
+  const geoReq = useRef(0);
+  const applyPlace = (latitude: number, longitude: number) => {
+    setCoords({ latitude, longitude });
+    const request = ++geoReq.current;
+    void reverseGeocode(latitude, longitude).then((place) => {
+      if (geoReq.current !== request) return;
+      setF((current) => ({
+        ...current,
+        ...(place.city ? { city: place.city } : {}),
+        ...(place.locality ? { area: place.locality } : {}),
+        ...(place.street && place.street.trim().length >= 3 ? { building: place.street.trim() } : {}),
+        ...(place.pincode && /^\d{6}$/.test(place.pincode) ? { pincode: place.pincode } : {}),
+      }));
+      const where = [place.locality, place.city].filter(Boolean).join(', ');
+      toast(where ? `Address filled · ${where}` : 'Location set', 'map-pin');
+    }).catch(() => toast('Could not look up that map point', 'map-pin'));
+  };
+
   const useCurrentLocation = () => {
     if (!navigator.geolocation) { toast('Location is not available on this device', 'locate-fixed'); return; }
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const latitude = pos.coords.latitude;
-        const longitude = pos.coords.longitude;
-        setCoords({ latitude, longitude });
-        void reverseGeocode(latitude, longitude).then((place) => {
-          setF((current) => ({ ...current, city: place.city }));
-          toast(`Using your current location · ${place.city}`, 'locate-fixed');
-        }).catch(() => toast('Using your current location', 'locate-fixed'));
-      },
+      (pos) => applyPlace(pos.coords.latitude, pos.coords.longitude),
       () => toast('Location access was blocked', 'locate-fixed'),
       { enableHighAccuracy: true, timeout: 10000 },
     );
@@ -284,37 +323,61 @@ export function SellWizard() {
                 <FieldRow label="Property Title" required hint={`${f.title.length}/100 characters${f.title.trim() && f.title.trim().length < MIN_TITLE ? ` · at least ${MIN_TITLE}` : ''}`}>
                   <TextInput icon="type" maxLength={100} value={f.title} onChange={set('title')} placeholder="e.g. Bright 3 BHK in Adyar" />
                 </FieldRow>
-                <FieldRow label="Property Sub-Type">
+                {subList.length > 0 && <FieldRow label="Property Sub-Type">
                   <div className="relative">
                     <select aria-label="Property sub-type" value={f.subType} onChange={set('subType')} className="w-full h-12 px-3.5 pr-10 bg-white border border-ink-200 rounded-xl outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 text-[14px] text-ink-900 appearance-none">
                       <option value="">Select sub-type</option>{subList.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                     <Icon name="chevron-down" size={18} color="#94A3B8" className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
-                </FieldRow>
-                <FieldRow label="BHK Configuration" required><PillRow options={BHKS} value={f.bhk} onPick={(v) => setF((o) => ({ ...o, bhk: v }))} /></FieldRow>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <FieldRow label="Built-up Area (sqft)" required hint="Carpet area + wall thickness"><TextInput icon="ruler" suffix="sqft" inputMode="numeric" value={f.builtup} onChange={set('builtup')} placeholder="e.g. 1200" /></FieldRow>
-                  <FieldRow label="Carpet Area (sqft)" hint="Usable floor area (optional)"><TextInput icon="scan" suffix="sqft" inputMode="numeric" value={f.carpet} onChange={set('carpet')} placeholder="Enter carpet area" /></FieldRow>
-                </div>
-                <FieldRow label="Floor Number" required>
-                  <div className="grid grid-cols-2 gap-3"><TextInput icon="building-2" inputMode="numeric" value={f.floor} onChange={set('floor')} placeholder="Your floor" /><TextInput icon="layers" inputMode="numeric" value={f.totalFloors} onChange={set('totalFloors')} placeholder="Total floors" /></div>
-                </FieldRow>
-                <FieldRow label="Flat / Unit Number" hint="Optional"><TextInput icon="hash" value={f.unit} onChange={set('unit')} placeholder="e.g. A-204, Tower B" /></FieldRow>
-                <FieldRow label="Property Age" required><PillRow options={AGES} value={f.age} onPick={(v) => setF((o) => ({ ...o, age: v }))} /></FieldRow>
+                </FieldRow>}
+                {kind === 'home' && <>
+                  <FieldRow label="BHK Configuration" required><PillRow options={BHKS} value={f.bhk} onPick={(v) => setF((o) => ({ ...o, bhk: v }))} /></FieldRow>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <FieldRow label="Built-up Area (sqft)" required hint={`At least ${AREA_MIN} sqft`}><TextInput icon="ruler" suffix="sqft" inputMode="numeric" value={f.builtup} onChange={set('builtup')} placeholder="e.g. 1200" /></FieldRow>
+                    <FieldRow label="Carpet Area (sqft)" hint="Usable floor area (optional)"><TextInput icon="scan" suffix="sqft" inputMode="numeric" value={f.carpet} onChange={set('carpet')} placeholder="Enter carpet area" /></FieldRow>
+                  </div>
+                  <FieldRow label="Floor Number">
+                    <div className="grid grid-cols-2 gap-3"><TextInput icon="building-2" inputMode="numeric" value={f.floor} onChange={set('floor')} placeholder="Your floor" /><TextInput icon="layers" inputMode="numeric" value={f.totalFloors} onChange={set('totalFloors')} placeholder="Total floors" /></div>
+                  </FieldRow>
+                  <FieldRow label="Flat / Unit Number" hint="Optional"><TextInput icon="hash" value={f.unit} onChange={set('unit')} placeholder="e.g. A-204, Tower B" /></FieldRow>
+                  <FieldRow label="Property Age"><PillRow options={AGES} value={f.age} onPick={(v) => setF((o) => ({ ...o, age: v }))} /></FieldRow>
+                </>}
+                {kind === 'plot' && <FieldRow label="Plot Area (sqft)" required hint={`At least ${AREA_MIN} sqft`}><TextInput icon="ruler" suffix="sqft" inputMode="numeric" value={f.plotArea} onChange={set('plotArea')} placeholder="e.g. 2400" /></FieldRow>}
+                {kind === 'commercial' && <>
+                  <FieldRow label="Suitable For"><PillRow options={SUBTYPES.commercial ?? []} value={f.suitableFor} onPick={(v) => setF((o) => ({ ...o, suitableFor: v }))} /></FieldRow>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <FieldRow label="Built-up Area (sqft)" required hint={`At least ${AREA_MIN} sqft, or a plot area`}><TextInput icon="ruler" suffix="sqft" inputMode="numeric" value={f.builtup} onChange={set('builtup')} placeholder="e.g. 2000" /></FieldRow>
+                    <FieldRow label="Plot Area (sqft)" hint="If the listing is land-led"><TextInput icon="map" suffix="sqft" inputMode="numeric" value={f.plotArea} onChange={set('plotArea')} placeholder="Optional" /></FieldRow>
+                  </div>
+                  <FieldRow label="Floor Number"><TextInput icon="building-2" inputMode="numeric" value={f.floor} onChange={set('floor')} placeholder="Your floor" /></FieldRow>
+                </>}
+                {kind === 'fractional' && <>
+                  <FieldRow label="Share Percentage" required hint="Between 0.01 and 100"><TextInput icon="pie-chart" suffix="%" inputMode="decimal" value={f.share} onChange={set('share')} placeholder="e.g. 10" /></FieldRow>
+                  <FieldRow label="Total Property Value (₹)" required hint={`At least ₹${PRICE_MIN.toLocaleString('en-IN')}`}><TextInput icon="indian-rupee" prefix="₹" inputMode="numeric" value={f.totalValue} onChange={set('totalValue')} placeholder="e.g. 8500000" /></FieldRow>
+                </>}
+                {kind === 'interior' && <FieldRow label="Scope of Work" required hint="What the interior project covers"><PillRow options={SUBTYPES.interior ?? []} value={f.scope} onPick={(v) => setF((o) => ({ ...o, scope: v }))} /></FieldRow>}
               </div>
             </div>)}
 
             {step === 1 && (<div>
               <h2 className="text-[18px] font-bold text-ink-900 mb-1">Location & Address</h2>
               <p className="text-[13px] text-ink-500 mb-5">Buyers filter by area — be precise.</p>
-              <div className="rounded-2xl overflow-hidden border border-ink-200 bg-map relative mb-5" style={{ height: 200 }}>
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"><div className="w-10 h-10 rounded-full bg-brand-600 grid place-items-center shadow-lg ring-4 ring-white"><Icon name="map-pin" size={20} color="#fff" /></div></div>
-                {coords && <div className="absolute top-3 left-3 bg-white rounded-lg px-3 h-8 text-[12px] font-semibold text-emerald-700 flex items-center gap-1.5 shadow-sm"><Icon name="check" size={13} color="#059669" />{coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}</div>}
-                <button type="button" onClick={useCurrentLocation} className="absolute bottom-3 right-3 bg-white rounded-lg px-3 h-9 text-[12.5px] font-semibold text-ink-800 flex items-center gap-1.5 shadow-sm hover:bg-ink-50"><Icon name="locate-fixed" size={14} color="#1A6FFF" />Use current</button>
+              <div className="relative mb-5">
+                <LiveMap
+                  height={280}
+                  className="rounded-2xl border border-ink-200"
+                  pickable
+                  pins={coords ? [{ id: 'listing', latitude: coords.latitude, longitude: coords.longitude }] : []}
+                  center={coords ?? cityCenter(f.city)}
+                  onPick={(point) => applyPlace(point.latitude, point.longitude)}
+                />
+                {coords && <div className="absolute top-3 left-3 z-10 bg-white rounded-lg px-3 h-8 text-[12px] font-semibold text-emerald-700 flex items-center gap-1.5 shadow-sm"><Icon name="check" size={13} color="#059669" />{coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}</div>}
+                <button type="button" onClick={useCurrentLocation} className="absolute bottom-3 left-3 z-10 bg-white rounded-lg px-3 h-9 text-[12.5px] font-semibold text-ink-800 flex items-center gap-1.5 shadow-sm hover:bg-ink-50"><Icon name="locate-fixed" size={14} color="#1A6FFF" />Use current</button>
               </div>
+              <p className="text-[12.5px] text-ink-500 -mt-3 mb-4">Click the map or drag the pin. Building, area, city and pincode fill in from that point.</p>
               <div className="space-y-4">
-                <FieldRow label="Building / Society" required><TextInput icon="building" value={f.building} onChange={set('building')} placeholder="e.g. Sunrise Heights" /></FieldRow>
+                <FieldRow label={kind === 'plot' ? 'Layout / plot name' : kind === 'interior' ? 'Site / studio name' : 'Building / Society'} required><TextInput icon="building" value={f.building} onChange={set('building')} placeholder={kind === 'plot' ? 'e.g. Green Acres Layout' : 'e.g. Sunrise Heights'} /></FieldRow>
                 <FieldRow label="Area / Locality"><TextInput icon="map" value={f.area} onChange={set('area')} placeholder="e.g. Adyar" /></FieldRow>
                 <div className="grid grid-cols-2 gap-3">
                   <FieldRow label="City"><TextInput icon="map-pin" value={f.city} onChange={set('city')} /></FieldRow>
@@ -327,28 +390,45 @@ export function SellWizard() {
               <h2 className="text-[18px] font-bold text-ink-900 mb-1">Property Details</h2>
               <p className="text-[13px] text-ink-500 mb-5">The specifics buyers care about.</p>
               <div className="space-y-4">
-                <FieldRow label="Facing Direction" required>
+                {kind === 'interior' && <p className="text-[13.5px] text-ink-500">Interior projects do not need ownership, facing or parking. Continue when the scope on the previous step looks right.</p>}
+                {(kind === 'home' || kind === 'plot' || kind === 'commercial') && <FieldRow label="Facing Direction">
                   <div className="grid grid-cols-4 gap-2.5">{FACINGS.map((d) => (
                     <button type="button" key={d} onClick={() => setF((o) => ({ ...o, facing: d }))} className={cx('h-11 rounded-xl border text-[13.5px] font-semibold transition', f.facing === d ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-100' : 'border-ink-200 text-ink-700 hover:border-brand-300')}>{d}</button>))}
                   </div>
-                </FieldRow>
-                <FieldRow label="Ownership Type" required>
+                </FieldRow>}
+                {kind !== 'interior' && <FieldRow label="Ownership Type" required>
                   <div className="grid grid-cols-2 gap-2.5">{OWNERSHIPS.map((d) => (
                     <button type="button" key={d} onClick={() => setF((o) => ({ ...o, ownership: d }))} className={cx('h-12 rounded-xl border text-[13.5px] font-semibold transition', f.ownership === d ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-100' : 'border-ink-200 text-ink-700 hover:border-brand-300')}>{d}</button>))}
                   </div>
-                </FieldRow>
-                <FieldRow label="Furnishing Status">
-                  <div className="grid grid-cols-3 gap-2.5">{FURNISHINGS.map((d) => (
-                    <button type="button" key={d} onClick={() => setF((o) => ({ ...o, furnishing: d }))} className={cx('h-11 rounded-xl border text-[13px] font-semibold transition', f.furnishing === d ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-100' : 'border-ink-200 text-ink-700 hover:border-brand-300')}>{d}</button>))}
-                  </div>
-                </FieldRow>
-                <FieldRow label="Parking Spaces">
-                  <div className="inline-flex items-center gap-4 rounded-xl border border-ink-200 px-4 h-12">
-                    <button type="button" aria-label="Fewer parking spaces" onClick={() => setF((o) => ({ ...o, parking: Math.max(0, o.parking - 1) }))} className="w-8 h-8 rounded-lg bg-ink-100 grid place-items-center hover:bg-ink-200"><Icon name="minus" size={16} color="#334155" /></button>
-                    <span className="text-[16px] font-extrabold text-ink-900 w-6 text-center">{f.parking}</span>
-                    <button type="button" aria-label="More parking spaces" onClick={() => setF((o) => ({ ...o, parking: Math.min(50, o.parking + 1) }))} className="w-8 h-8 rounded-lg bg-ink-100 grid place-items-center hover:bg-ink-200"><Icon name="plus" size={16} color="#334155" /></button>
-                  </div>
-                </FieldRow>
+                </FieldRow>}
+                {kind === 'plot' && <>
+                  <FieldRow label="Road Width (ft)"><TextInput icon="ruler" suffix="ft" inputMode="numeric" value={f.roadWidth} onChange={set('roadWidth')} placeholder="e.g. 30" /></FieldRow>
+                  <FieldRow label="Approval Type"><PillRow options={['CMDA', 'DTCP', 'BDA', 'Panchayat', 'Other']} value={f.approval} onPick={(v) => setF((o) => ({ ...o, approval: v }))} /></FieldRow>
+                </>}
+                {kind === 'home' && <>
+                  <FieldRow label="Furnishing Status">
+                    <div className="grid grid-cols-3 gap-2.5">{FURNISHINGS.map((d) => (
+                      <button type="button" key={d} onClick={() => setF((o) => ({ ...o, furnishing: d }))} className={cx('h-11 rounded-xl border text-[13px] font-semibold transition', f.furnishing === d ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-100' : 'border-ink-200 text-ink-700 hover:border-brand-300')}>{d}</button>))}
+                    </div>
+                  </FieldRow>
+                  {furnished && <FieldRow label="Furnishing Details" required hint="Required when the home is not unfurnished"><TextInput icon="sofa" value={f.furnishDetails} onChange={set('furnishDetails')} placeholder="e.g. Modular kitchen, wardrobes, ACs" /></FieldRow>}
+                </>}
+                {(kind === 'home' || kind === 'commercial') && <>
+                  <FieldRow label="Parking Spaces">
+                    <div className="inline-flex items-center gap-4 rounded-xl border border-ink-200 px-4 h-12">
+                      <button type="button" aria-label="Fewer parking spaces" onClick={() => setF((o) => ({ ...o, parking: Math.max(0, o.parking - 1) }))} className="w-8 h-8 rounded-lg bg-ink-100 grid place-items-center hover:bg-ink-200"><Icon name="minus" size={16} color="#334155" /></button>
+                      <span className="text-[16px] font-extrabold text-ink-900 w-6 text-center">{f.parking}</span>
+                      <button type="button" aria-label="More parking spaces" onClick={() => setF((o) => ({ ...o, parking: Math.min(50, o.parking + 1) }))} className="w-8 h-8 rounded-lg bg-ink-100 grid place-items-center hover:bg-ink-200"><Icon name="plus" size={16} color="#334155" /></button>
+                    </div>
+                  </FieldRow>
+                  {f.parking > 0 && (
+                    <FieldRow label="Parking Type" required>
+                      <div className="grid grid-cols-3 gap-2.5">{PARKING_TYPES.map((d) => (
+                        <button type="button" key={d} onClick={() => setF((o) => ({ ...o, parkingType: d }))} className={cx('h-11 rounded-xl border text-[13.5px] font-semibold transition', f.parkingType === d ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-100' : 'border-ink-200 text-ink-700 hover:border-brand-300')}>{d}</button>
+                      ))}</div>
+                    </FieldRow>
+                  )}
+                </>}
               </div>
             </div>)}
 
