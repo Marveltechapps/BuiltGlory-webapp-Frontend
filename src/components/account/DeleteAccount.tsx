@@ -14,7 +14,7 @@ import { useBack } from '../../hooks/useNavigation';
 import { useTimer } from '../../hooks/useCountdown';
 import { useSession } from '../../context/SessionContext';
 import { useToast } from '../../context/ToastContext';
-import { getAccountDeletion, requestAccountDeletion } from '../../services/userService';
+import { cancelAccountDeletion, getAccountDeletion, requestAccountDeletion } from '../../services/userService';
 import { listMyEnquiries } from '../../services/enquiryService';
 import { listMySellRequests } from '../../services/sellRequestService';
 import { sendCustomerOtp, verifyCustomerOtp } from '../../services/authService';
@@ -44,19 +44,34 @@ function Stepper({ step }: { step: number }) {
   );
 }
 
-function Deleted({ status, onDone }: { status: AccountDeletionStatus; onDone: () => void }) {
+function Deleted({ status, onDone, onCancelled }: { status: AccountDeletionStatus; onDone: () => void; onCancelled: () => void }) {
   const { user } = useSession();
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const cancel = async () => {
+    setBusy(true);
+    try {
+      await cancelAccountDeletion();
+      toast('Account deletion cancelled', 'check');
+      onCancelled();
+    } catch (e) {
+      toast(errorMessage(e, 'Could not cancel deletion.'), 'triangle-alert');
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <PageWrap className="!max-w-[520px]">
       <Card className="p-8 text-center mt-6">
         <div className="w-20 h-20 rounded-full bg-emerald-50 grid place-items-center mx-auto"><Icon name="check" size={38} color="#059669" strokeWidth={2.5} /></div>
         <h1 className="text-[22px] font-extrabold tracking-tight text-ink-900 mt-5">Account deletion requested</h1>
-        <p className="text-[13.5px] text-ink-500 mt-2">Your Builtglory account for +91 {mobileOf(user)} is scheduled for deletion. Your data will be permanently erased within 30 days.</p>
+        <p className="text-[13.5px] text-ink-500 mt-2">Your Builtglory account for +91 {mobileOf(user)} is scheduled for deletion. Your data will be permanently erased within 30 days. You can cancel the request until that date.</p>
         <div className="rounded-2xl bg-ink-50 p-4 mt-6 text-left text-[13px] text-ink-600 space-y-2">
           <div className="flex items-center gap-2"><Icon name="calendar" size={15} color="#1A6FFF" />Scheduled for {status.scheduledDeletionAt ? longDate(status.scheduledDeletionAt) : 'deletion within 30 days'}</div>
           <div className="flex items-center gap-2"><Icon name="info" size={15} color="#1A6FFF" />Requested {status.requestedAt ? longDate(status.requestedAt) : 'today'}</div>
         </div>
-        <Button size="lg" className="w-full mt-6" onClick={onDone}>Done</Button>
+        <Button size="lg" className="w-full mt-6" variant="outline" disabled={busy} onClick={() => void cancel()}>{busy ? 'Cancelling…' : 'Cancel deletion'}</Button>
+        <Button size="lg" className="w-full mt-2.5" onClick={onDone}>Done</Button>
       </Card>
     </PageWrap>
   );
@@ -95,7 +110,7 @@ export function DeleteAccount() {
   const done = () => { void signOut().then(() => router.push('/')); };
   if (status.loading && !status.data) return <PageLoading label="Loading account" />;
   const current = deleted ?? (status.data?.status === 'requested' ? status.data : null);
-  if (current) return <Deleted status={current} onDone={done} />;
+  if (current) return <Deleted status={current} onDone={done} onCancelled={status.reload} />;
 
   const c = counts.data;
   const lose: Array<[string, string, string]> = [

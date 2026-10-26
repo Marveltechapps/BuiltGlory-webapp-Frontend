@@ -20,3 +20,8 @@ export function getAccountDeletion(signal?: AbortSignal) {
 export function requestAccountDeletion(reason: string | null) {
   return apiSend<AccountDeletionStatus>('POST', '/me/account-deletion', { confirmation: 'DELETE', reason });
 }
+
+/** DELETE /me/account-deletion — cancel a request that is still inside the grace window. */
+export function cancelAccountDeletion() {
+  return apiSend<AccountDeletionStatus>('DELETE', '/me/account-deletion');
+}
