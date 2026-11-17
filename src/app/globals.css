@@ -46,6 +46,7 @@ body { margin: 0; font-family: var(--font-inter), 'Inter', system-ui, sans-serif
   .web-list > [class*="space-y"] > * { margin: 0 !important; }
   .web-list > [class*="space-y"] > [class*="col-span"], .web-list > [class*="space-y"] > div:only-child { grid-column: 1 / -1; }
 }
+@keyframes qrScan { from { top: 12px; } to { top: calc(100% - 14px); } }
 @keyframes featIn { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
 @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
 @keyframes iconPop { 0% { opacity: 0; transform: scale(.4) rotate(-12deg); } 60% { opacity: 1; transform: scale(1.12) rotate(3deg); } 100% { transform: none; } }

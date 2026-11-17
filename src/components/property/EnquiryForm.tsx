@@ -20,11 +20,13 @@ import { typeLabel } from '../../lib/catalog';
 import { cx, digits, formatINR, localMobile } from '../../lib/format';
 import { mobileOf } from '../../lib/user';
 import { propertyPhotos } from '../../lib/property';
-import type { BuyEnquiry, InterestType, PreferredContact, PreferredVisitTime } from '../../types/enquiry';
+import type { BuyEnquiry, InterestType, PreferredContact } from '../../types/enquiry';
 
 const CONTACTS: Array<[string, PreferredContact]> = [['Phone', 'phone'], ['WhatsApp', 'whatsapp'], ['Email', 'email']];
-const INTERESTS: Array<[string, InterestType]> = [['Schedule Visit', 'schedule_visit'], ['Price Negotiation', 'price_negotiation'], ['More Details', 'more_details']];
-const SLOTS: Array<[string, PreferredVisitTime]> = [['Tomorrow, 10:00 AM – 12:00 PM', 'tomorrow_morning'], ['This Weekend, 2:00 PM – 5:00 PM', 'this_weekend_afternoon'], ['Custom Date & Time', 'custom']];
+/** The API's `interestType` enum has no home-loan value: Home Loan is sent as `more_details` and tagged in `enquiryTypes`. */
+const INTERESTS: Array<[string, InterestType]> = [['More Details', 'more_details'], ['Price Negotiation', 'price_negotiation'], ['Home Loan', 'more_details']];
+const BUDGETS = ['Within listed price', 'Slightly lower', 'Flexible'];
+const TIMELINES = ['Immediately', 'Within 3 months', 'Just exploring'];
 
 function CtaBtn({ options, value, onPick }: { options: string[]; value: string; onPick: (v: string) => void }) {
   return (
@@ -44,8 +46,9 @@ export function EnquiryForm({ propertyId }: { propertyId: string }) {
   const { data: p, loading, error, reload } = useProperty(propertyId);
   const [done, setDone] = useState<BuyEnquiry | null>(null);
   const [contact, setContact] = useState('WhatsApp');
-  const [intent, setIntent] = useState('Schedule Visit');
-  const [slot, setSlot] = useState(0);
+  const [intent, setIntent] = useState('More Details');
+  const [budget, setBudget] = useState('Within listed price');
+  const [timeline, setTimeline] = useState('Within 3 months');
   const [msg, setMsg] = useState('');
   const [agree, setAgree] = useState(false);
   const [name, setName] = useState(user?.name ?? '');
@@ -62,19 +65,19 @@ export function EnquiryForm({ propertyId }: { propertyId: string }) {
       <Card className="p-8 text-center mt-6">
         <div className="w-24 h-24 rounded-full bg-emerald-50 grid place-items-center mx-auto ring-8 ring-emerald-50/60"><Icon name="check" size={44} color="#059669" strokeWidth={2.5} /></div>
         <h1 className="text-[24px] font-extrabold tracking-tight text-ink-900 mt-6">Enquiry submitted!</h1>
-        <p className="text-[14px] text-ink-500 mt-2">Our advisor will call you within an hour.<br />Track all your enquiries in <button type="button" onClick={() => router.push('/enquiries')} className="text-brand-600 font-semibold">History</button>.</p>
+        <p className="text-[14px] text-ink-500 mt-2">Our advisor will call you within an hour.<br />Track it anytime in <button type="button" onClick={() => router.push('/enquiries')} className="text-brand-600 font-semibold">My Enquiries</button>.</p>
         <div className="rounded-2xl bg-ink-50 p-5 mt-7 text-left">
           <div className="text-[12px] font-semibold text-ink-400 uppercase tracking-wide mb-3">What happens next</div>
           <div className="space-y-2.5">
-            {['Advisor calls within 1 hour', 'Site visit confirmed by SMS', 'Offer & paperwork support'].map((t) => (
+            {['Advisor calls within 1 hour', 'Property details & documents shared', 'Site visit unlocked for this property'].map((t) => (
               <div key={t} className="flex items-center gap-2.5 text-[13.5px] text-ink-700"><Icon name="circle-check" size={17} color="#1A6FFF" />{t}</div>
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2.5 mt-6">
-          <Button variant="outline" size="sm" onClick={() => router.push('/')}>Home</Button>
+        <Button size="lg" className="w-full mt-6" icon="inbox" onClick={() => router.push('/enquiries')}>View My Enquiries</Button>
+        <div className="grid grid-cols-2 gap-2.5 mt-2.5">
           <Button variant="outline" size="sm" onClick={() => router.push(`/properties/${p._id}`)}>View Property</Button>
-          <Button size="sm" onClick={() => router.push(`/properties/${p._id}/visit?enquiryId=${done._id}`)}>Schedule Visit</Button>
+          <Button variant="outline" size="sm" icon="calendar" onClick={() => router.push(`/properties/${p._id}/visit?enquiryId=${done._id}`)}>Schedule a Visit</Button>
         </div>
       </Card>
     </PageWrap>
@@ -93,12 +96,12 @@ export function EnquiryForm({ propertyId }: { propertyId: string }) {
         const updated = await updateMe({ ...(nameChanged ? { name: name.trim() } : {}), ...(emailChanged ? { email: email.trim() } : {}) });
         setUser(updated);
       }
-      const interestType = INTERESTS.find(([l]) => l === intent)?.[1] ?? 'more_details';
       const enquiry = await createEnquiry({
         propertyId: p._id,
+        enquiryTypes: [`Interest: ${intent}`, `Budget: ${budget}`, `Planning to buy: ${timeline}`],
         preferredContact: CONTACTS.find(([l]) => l === contact)?.[1] ?? 'whatsapp',
-        interestType,
-        preferredVisitTime: interestType === 'schedule_visit' ? SLOTS[slot]?.[1] ?? null : null,
+        interestType: INTERESTS.find(([l]) => l === intent)?.[1] ?? 'more_details',
+        preferredVisitTime: null,
         additionalMessage: msg.trim() || null,
       });
       setDone(enquiry);
@@ -136,19 +139,11 @@ export function EnquiryForm({ propertyId }: { propertyId: string }) {
         <div className="text-[14px] font-extrabold text-brand-700 mt-6 mb-2">I&apos;m interested in</div>
         <CtaBtn options={INTERESTS.map(([l]) => l)} value={intent} onPick={setIntent} />
 
-        {intent === 'Schedule Visit' && (
-          <div className="slide-in">
-            <div className="text-[13px] font-semibold text-ink-700 mt-5 mb-2">Preferred visit time</div>
-            <div className="space-y-2.5">
-              {SLOTS.map(([s], i) => (
-                <button type="button" key={s} onClick={() => setSlot(i)} className={cx('w-full flex items-center gap-3 h-12 px-4 rounded-xl border transition text-left', slot === i ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-100' : 'border-ink-200 hover:border-brand-300')}>
-                  <span className={cx('w-5 h-5 rounded-full border-2 grid place-items-center shrink-0', slot === i ? 'border-brand-600' : 'border-ink-300')}>{slot === i && <span className="w-2.5 h-2.5 rounded-full bg-brand-600"></span>}</span>
-                  <span className={cx('text-[13.5px]', slot === i ? 'font-semibold text-ink-900' : 'text-ink-600')}>{s}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="text-[13px] font-semibold text-ink-700 mt-5 mb-2">Budget</div>
+        <CtaBtn options={BUDGETS} value={budget} onPick={setBudget} />
+        <div className="text-[13px] font-semibold text-ink-700 mt-5 mb-2">Planning to buy</div>
+        <CtaBtn options={TIMELINES} value={timeline} onPick={setTimeline} />
+        <div className="mt-4 p-3 rounded-xl bg-brand-50 flex items-start gap-2 text-[12.5px] text-brand-700"><Icon name="info" size={14} color="#1A6FFF" className="mt-0.5 shrink-0" />Site visits are booked separately once your enquiry is submitted.</div>
 
         <div className="text-[13px] font-semibold text-ink-700 mt-5 mb-2">Additional Message (Optional)</div>
         <div className="relative">

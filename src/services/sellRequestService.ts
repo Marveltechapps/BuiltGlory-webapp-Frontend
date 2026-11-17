@@ -26,6 +26,11 @@ export function getSellRequest(id: string, signal?: AbortSignal) {
   return apiGet<SellRequest>(`/me/sell-requests/${encodeURIComponent(id)}`, undefined, signal);
 }
 
+/** POST /me/sell-requests/:id/withdraw — the API has no delete; withdrawing pauses the listing ("Withdrawn by seller"). */
+export function withdrawSellRequest(id: string) {
+  return apiSend<SellRequest>('POST', `/me/sell-requests/${encodeURIComponent(id)}/withdraw`);
+}
+
 /** GET /me/sell-requests/:id/activity — offer, payout schedule, registration, metrics. */
 export function getSellerActivity(id: string, signal?: AbortSignal) {
   return apiGet<SellerActivity>(`/me/sell-requests/${encodeURIComponent(id)}/activity`, undefined, signal);

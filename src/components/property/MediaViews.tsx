@@ -33,8 +33,11 @@ export function VrTour({ id }: { id: string }) {
   const { toast } = useToast();
   const box = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [room, setRoom] = useState('Living');
+  const [muted, setMuted] = useState(false);
   if (gate || !p) return gate;
   const url = p.media?.tour3dUrl;
+  const rooms = ['Living', 'Kitchen', 'Master Bed', 'Bed 2', 'Bathroom', 'Balcony'];
   return (
     <PageWrap className="!max-w-[1120px] web-split">
       <div className="flex items-center justify-between mb-4">
@@ -47,17 +50,19 @@ export function VrTour({ id }: { id: string }) {
         ) : (
           <>
             <div className="absolute top-4 left-4"><span className="bg-white/15 backdrop-blur text-white text-[11px] font-bold px-2.5 py-1 rounded-full ring-1 ring-white/25">LIVE 360°</span></div>
-            <div className="absolute top-4 right-4 text-[13px] font-semibold text-indigo-200 max-w-[60%] truncate">{p.title}</div>
+            <div className="absolute top-4 right-4 text-[13px] font-semibold text-indigo-200">{room}</div>
             <button type="button" aria-label="Play tour" disabled={!url} onClick={() => setPlaying(true)} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full ring-2 ring-white/40 grid place-items-center hover:ring-white/70 transition disabled:opacity-60"><Icon name="rotate-3d" size={34} color="#fff" /></button>
             {!url && <div className="absolute left-1/2 top-[62%] -translate-x-1/2 text-center text-[13px] font-semibold text-indigo-100 px-4">A virtual tour isn&apos;t available for this property yet.</div>}
           </>
         )}
         <div className="absolute inset-x-0 bottom-4 flex items-center justify-between px-4 pointer-events-none">
-          <span className="w-11 h-11"></span>
-          <button type="button" disabled={!url} onClick={() => setPlaying((v) => !v)} className="pointer-events-auto bg-white rounded-full px-5 h-11 text-[14px] font-bold text-ink-900 flex items-center gap-2 shadow-lg disabled:opacity-60"><Icon name={playing ? 'pause' : 'play'} size={16} color="#0F172A" />{playing ? 'Close tour' : 'Play tour'}</button>
+          <button type="button" aria-label={muted ? 'Unmute audio' : 'Mute audio'} onClick={() => { setMuted((m) => !m); toast(muted ? 'Audio on' : 'Audio muted', muted ? 'volume-2' : 'volume-x'); }} className="pointer-events-auto w-11 h-11 rounded-full bg-white/15 backdrop-blur grid place-items-center ring-1 ring-white/20"><Icon name={muted ? 'volume-x' : 'volume-2'} size={18} color="#fff" /></button>
+          <button type="button" disabled={!url} onClick={() => setPlaying((v) => !v)} className="pointer-events-auto bg-white rounded-full px-5 h-11 text-[14px] font-bold text-ink-900 flex items-center gap-2 shadow-lg disabled:opacity-60"><Icon name={playing ? 'pause' : 'play'} size={16} color="#0F172A" />{playing ? 'Pause tour' : 'Play tour'}</button>
           <button type="button" aria-label="Tour info" onClick={() => toast(url ? `360° tour of ${p.title}` : 'No virtual tour uploaded yet', 'info')} className="pointer-events-auto w-11 h-11 rounded-full bg-white/15 backdrop-blur grid place-items-center ring-1 ring-white/20"><Icon name="info" size={18} color="#fff" /></button>
         </div>
       </div>
+      <div className="text-[12px] font-semibold text-ink-400 uppercase tracking-wide mt-6 mb-2">Rooms</div>
+      <div className="flex flex-wrap gap-2">{rooms.map((r) => <Pill key={r} active={room === r} onClick={() => setRoom(r)}>{r}</Pill>)}</div>
     </PageWrap>
   );
 }

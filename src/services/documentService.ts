@@ -2,7 +2,7 @@ import { apiGet, apiUpload } from './api';
 import type { UploadedDocument } from '../types/misc';
 
 type OwnerType = 'user' | 'sell_request' | 'support_ticket';
-type Purpose = 'property_media' | 'support_attachment';
+type Purpose = 'property_media' | 'support_attachment' | 'kyc';
 
 /** POST /documents (multipart, field "file") — returns the stored document with its `url`. */
 export function uploadDocument(file: File, ownerType: OwnerType, ownerId: string, purpose: Purpose, documentType: string) {

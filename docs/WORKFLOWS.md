@@ -136,7 +136,7 @@ sequenceDiagram
   A->>API: convert enquiry to deal (POST /admin/buy-enquiries/:id/convert-to-deal)
   A->>API: move deal stages (negotiation → token_payment → … → closed)
   B->>API: GET /me/buy-enquiries (visits[] + deal + customerStageLabel)
-  Note over B: My Enquiries, Enquiry status (10 steps), My Visits, My Deals all read this
+  Note over B: My Enquiries, Enquiry status (8 steps), My Visits, My Deals all read this
 ```
 
 Backend must: return each enquiry **enriched with `visits[]` (by `enquiryId`) and `deal`** — the web has no other source for visits and buyer deals.

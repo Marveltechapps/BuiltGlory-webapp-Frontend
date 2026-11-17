@@ -18,7 +18,7 @@ import { uploadDocument } from '../../services/documentService';
 import { sendCustomerOtp, verifyPhoneChangeOtp } from '../../services/authService';
 import { errorMessage } from '../../services/api';
 import { digits, initials } from '../../lib/format';
-import { displayName, mobileOf, roleLabel } from '../../lib/user';
+import { displayName, mobileOf } from '../../lib/user';
 
 // ── PROFILE ──────────────────────────────────────────────────
 export function Profile() {
@@ -29,10 +29,8 @@ export function Profile() {
     ['phone', 'Mobile number', '+91 ' + mobileOf(user)],
     ['mail', 'Email', user?.email || 'Not added'],
     ['map-pin', 'City', user?.city || 'Not added'],
-    ['briefcase', 'I am a', roleLabel(user)],
   ];
   const actions: Array<[string, string, string, string]> = [
-    ['pencil', 'Edit Profile', 'Update your name, email and city', '/profile/edit'],
     ['smartphone', 'Change Phone Number', 'Verify a new mobile number with OTP', '/profile/change-phone'],
     ['user-cog', 'Account Settings', 'Signed in account and session', '/settings/account'],
   ];
@@ -84,7 +82,6 @@ export function EditProfile() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(user?.name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
-  const [city, setCity] = useState(user?.city ?? '');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -109,7 +106,7 @@ export function EditProfile() {
     if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) { setErr('Enter a valid email address.'); return; }
     setSaving(true);
     try {
-      setUser(await updateMe({ name: name.trim(), email: email.trim() || null, city: city.trim() || null }));
+      setUser(await updateMe({ name: name.trim(), email: email.trim() || null }));
       toast('Profile updated');
       back();
     } catch (x) { setErr(errorMessage(x, 'Could not update your profile.')); setSaving(false); }
@@ -133,15 +130,11 @@ export function EditProfile() {
         <div>
           <label className="block text-[13px] font-bold text-ink-800 mb-1.5">Phone Number</label>
           <div className="flex items-center gap-2 h-12 px-3.5 bg-ink-50 border border-ink-200 rounded-xl"><Icon name="phone" size={16} color="#94A3B8" /><span className="flex-1 text-[14px] text-ink-500">+91 {mobileOf(user)}</span><Icon name="lock" size={16} color="#94A3B8" /></div>
-          <p className="text-[12px] text-ink-400 mt-1.5">Verified — change it from Change Phone Number</p>
+          <p className="text-[12px] text-ink-400 mt-1.5">Verified — cannot be changed</p>
         </div>
         <div>
           <label htmlFor="ep-email" className="block text-[13px] font-bold text-ink-800 mb-1.5">Email Address</label>
           <TextInput id="ep-email" icon="mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="aarav@example.com" />
-        </div>
-        <div>
-          <label htmlFor="ep-city" className="block text-[13px] font-bold text-ink-800 mb-1.5">City</label>
-          <TextInput id="ep-city" icon="map-pin" value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Chennai" />
         </div>
       </div>
       <FormError message={err} />

@@ -34,6 +34,12 @@ export const shortDate = (value?: string | Date | null) => {
   return d ? `${MONTHS_SHORT[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')}` : '';
 };
 
+/** "Jun 20, 2026" */
+export const mediumDate = (value?: string | Date | null) => {
+  const d = toDate(value);
+  return d ? `${MONTHS_SHORT[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')}, ${d.getFullYear()}` : '';
+};
+
 /** "June 20, 2026" */
 export const longDate = (value?: string | Date | null) => {
   const d = toDate(value);

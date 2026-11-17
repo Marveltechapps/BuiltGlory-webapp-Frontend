@@ -51,3 +51,8 @@ export function startLiveChat(message: string) {
 export function requestCallback(slot: CallbackSlot, sourceScreen: string) {
   return apiSend<unknown>('POST', '/callbacks', { source: 'help_support', sourceScreen, category: 'general', bestTimePreference: slot });
 }
+
+/** POST /callbacks — advisor callback tied to a property (Enquiry Status actions). */
+export function requestPropertyCallback(body: { propertyId: string; reason: string; category?: 'property_inquiry' | 'pricing' | 'general'; bestTimePreference?: CallbackSlot; preferredTime?: string }) {
+  return apiSend<unknown>('POST', '/callbacks', { source: 'property_detail', sourceScreen: 'enquiry_status', category: body.category ?? 'property_inquiry', ...body });
+}

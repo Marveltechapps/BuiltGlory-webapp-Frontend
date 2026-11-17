@@ -21,8 +21,11 @@ import { confirmPayoutSchedule, confirmRegistration, decideOffer, getMarketEstim
 import { documentReadUrl } from '../../services/documentService';
 import { updateMe } from '../../services/userService';
 import { errorMessage } from '../../services/api';
-import { cx, formatINR, formatRupees, longDate } from '../../lib/format';
-import { LISTING_STEPS, listingSold, listingStepIndex, offerAccepted } from '../../lib/pipelines';
+import { cx, formatINR, formatRupees, longDate, mediumDate } from '../../lib/format';
+import { LISTING_STEPS, listingGroup, listingSold, listingStepIndex, offerAccepted } from '../../lib/pipelines';
+import { daysBetween, expectedLive, listingArea, listingChips, listingConfig, listingFloor } from '../../lib/listing';
+import { typeLabel } from '../../lib/catalog';
+import { PhotoPlaceholder } from '../ui/Photo';
 import type { RegistrationAppointment, SellerActivity } from '../../types/sellRequest';
 
 function useListing(id: string) {
@@ -58,16 +61,32 @@ export function ListingStatus({ id }: { id: string }) {
   const allDone = curIdx >= LISTING_STEPS.length;
   const cur = LISTING_STEPS[Math.min(curIdx, LISTING_STEPS.length - 1)]!;
   const hasOffer = Boolean(a.offer);
+  const group = listingGroup(l);
+  const upcoming = group === 'upcoming';
+  const live = expectedLive(l);
+  const details: Array<[string, string]> = [
+    ['Type', typeLabel(l.propertyType)], ['Configuration', listingConfig(l) ?? '—'], ['Built-up area', listingArea(l) ?? '—'], ['Facing', l.specifications?.facing ?? '—'],
+    ['Floor', listingFloor(l) ?? '—'], ['Property age', l.specifications?.propertyAge ?? '—'], ['Submitted', mediumDate(l.submittedAt) || '—'],
+    upcoming ? ['Expected live', live ? mediumDate(live) : '—'] : ['Status', group === 'active' ? 'Live' : group === 'sold' ? 'Sold' : l.status.replace(/_/g, ' ')],
+  ];
   return (
     <PageWrap className="!max-w-[1120px] web-split">
       <button type="button" onClick={back} className="flex items-center gap-2 text-[15px] font-bold text-ink-900 mb-1"><Icon name="arrow-left" size={18} />Listing Status</button>
       <p className="text-[13px] text-ink-500 mb-5 ml-7">{LISTING_STEPS.length}-step pipeline</p>
       <Card className="p-4 flex items-center gap-4">
         <div className={cx('w-16 h-16 rounded-2xl bg-gradient-to-br grid place-items-start p-2 shrink-0 relative overflow-hidden group', gradFor(l._id))}><ThumbFill src={l.photos?.[0]} />
-          <span className="relative text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-white text-emerald-600 capitalize">{l.status.replace(/_/g, ' ')}</span>
+          <span className={cx('relative text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-white capitalize', upcoming ? 'text-amber-600' : 'text-emerald-600')}>{group === 'draft' ? 'draft' : group}</span>
           <Wave />
         </div>
         <div><h3 className="text-[16px] font-bold text-ink-900">{title(a)}</h3><div className="text-[13px] text-ink-500">{[l.address?.locality, l.address?.city].filter(Boolean).join(', ') || '—'}</div><div className="text-[15px] font-extrabold text-brand-600 mt-0.5">{l.askingPrice ? formatINR(l.askingPrice) : '—'}</div></div>
+      </Card>
+      <Card className="p-5 mt-3">
+        <h3 className="text-[15px] font-bold text-ink-900 mb-3">Property details</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {details.map(([k, v]) => (
+            <div key={k} className="rounded-xl bg-ink-50 p-3"><div className="text-[11px] font-semibold text-ink-400 uppercase tracking-wide">{k}</div><div className="text-[13.5px] font-bold text-ink-900 mt-0.5">{v}</div></div>
+          ))}
+        </div>
       </Card>
       <div className="grid grid-cols-3 gap-3 mt-3">
         {[[(l.metrics?.views ?? 0).toLocaleString(), 'Views'], [String(a.metrics.enquiryCount), 'Enquiries'], [allDone ? 'Done' : `Step ${curIdx + 1}`, `of ${LISTING_STEPS.length}`]].map(([v, s]) => (
@@ -257,10 +276,22 @@ const BANK_FIELDS: Array<[keyof Bank, string, boolean, string]> = [
   ['ifsc', 'IFSC Code', true, 'e.g. HDFC0001234'], ['branch', 'Branch (optional)', false, 'Branch'], ['upi', 'UPI ID (optional)', false, 'name@bank'],
 ];
 
-async function openSellerFile(listingId: string, type: 'term_sheet' | 'sale_deed') {
+type SellerFile = 'term_sheet' | 'sale_deed' | 'payment_receipt' | 'registration_certificate';
+const FILE_LABEL: Record<SellerFile, string> = { term_sheet: 'term sheet', sale_deed: 'sale deed', payment_receipt: 'payment receipt', registration_certificate: 'registration certificate' };
+const matchesFile = (kind: SellerFile, type: string, name: string) => {
+  const hay = `${type} ${name}`.toLowerCase();
+  if (kind === 'payment_receipt') return type === 'payment_proof' || /receipt/.test(hay);
+  if (kind === 'registration_certificate') return /certificate/.test(hay);
+  return type === kind;
+};
+
+async function openSellerFile(listingId: string, kind: SellerFile, fallbackUrl?: string | null) {
   const docs = await listSellerDocuments(listingId);
-  const doc = docs.find((item) => item.type === type && (item.url || item.documentId));
-  if (!doc) throw new Error(type === 'term_sheet' ? 'The term sheet is not ready yet.' : 'The sale deed is not ready yet.');
+  const doc = docs.find((item) => matchesFile(kind, item.type, item.name) && (item.url || item.documentId));
+  if (!doc) {
+    if (fallbackUrl) { window.open(fallbackUrl, '_blank', 'noopener,noreferrer'); return; }
+    throw new Error(`The ${FILE_LABEL[kind]} is not ready yet.`);
+  }
   if (doc.url) { window.open(doc.url, '_blank', 'noopener,noreferrer'); return; }
   const signed = await documentReadUrl(doc.documentId!);
   window.open(signed.readUrl, '_blank', 'noopener,noreferrer');
@@ -484,9 +515,14 @@ export function Registration({ id }: { id: string }) {
 
 function StatusLine({ ok, yes, no }: { ok: boolean; yes: string; no: string }) {
   return ok
-    ? <span className="flex items-center gap-1.5 text-[13.5px] font-bold text-emerald-600"><Icon name="circle-check" size={16} color="#059669" />{yes}</span>
-    : <span className="flex items-center gap-1.5 text-[13.5px] font-bold text-amber-600"><Icon name="loader" size={16} color="#D97706" />{no}</span>;
+    ? <span className="flex items-center gap-1.5 text-[13px] font-bold text-emerald-600"><Icon name="circle-check" size={15} color="#059669" />{yes}</span>
+    : <span className="flex items-center gap-1.5 text-[13px] font-bold text-amber-600"><Icon name="loader" size={15} color="#D97706" />{no}</span>;
 }
+
+const docStr = (doc: Record<string, unknown> | undefined, ...keys: string[]) => {
+  for (const k of keys) { const v = doc?.[k]; if (typeof v === 'string' && v) return v; }
+  return null;
+};
 
 // ── SOLD ─────────────────────────────────────────────────────
 export function Sold({ id }: { id: string }) {
@@ -494,22 +530,87 @@ export function Sold({ id }: { id: string }) {
   const { toastError } = useToast();
   const { a, gate } = useListing(id);
   if (gate || !a) return gate;
-  const sold = listingSold(a.sellRequest, a);
+  const l = a.sellRequest;
+  const sold = listingSold(l, a);
   const paid = a.payoutSchedule.length > 0 && a.payoutSchedule.every((x) => x.status === 'paid');
   const registered = a.registration.status === 'completed';
+  const accepted = offerAccepted(a);
+  const doc = a.acquisition?.documentation;
+  const salePrice = l.sale?.salePrice ?? a.acquisition?.agreedPrice ?? a.offer?.amount ?? null;
+  const soldOn = l.sale?.saleDate ?? (sold ? a.acquisition?.updatedAt : null) ?? null;
+  const buyer = l.sale?.buyerName || 'Builtglory';
+  const days = daysBetween(l.submittedAt || l.createdAt, soldOn);
+  const certificate = doc?.certificate && typeof doc.certificate === 'object' ? docStr(doc.certificate as Record<string, unknown>, 'url') : null;
+  const summary: Array<[string, string]> = [
+    ['Listed price', l.askingPrice ? formatINR(l.askingPrice) : '—'], ['Final sale price', salePrice ? formatINR(salePrice) : '—'],
+    ['Sold on', soldOn ? mediumDate(soldOn) : '—'], ['Time to sell', days ? `${days} days` : '—'],
+    ['Buyer', buyer], ['Registration no.', docStr(doc, 'registrationNumber', 'registrationNo', 'regNo') ?? '—'],
+  ];
+  const timeline: Array<[string, string, boolean]> = [
+    ['Listed on Builtglory', mediumDate(l.submittedAt) || '—', true],
+    ['Offer accepted', `Verified buyer · ${buyer}`, accepted],
+    ['Deal confirmed', 'Term sheet signed', accepted],
+    ['Payment received', paid ? 'Full amount credited' : 'Payout in progress', paid],
+    ['Registration completed', registered ? (soldOn ? mediumDate(soldOn) : 'Completed') : 'Awaiting registration', registered],
+  ];
+  const files: Array<[string, SellerFile, string | null]> = [['Sale Deed', 'sale_deed', null], ['Payment Receipt', 'payment_receipt', null], ['Registration Certificate', 'registration_certificate', certificate]];
+  const chips = listingChips(l);
   return (
-    <PageWrap className="!max-w-[480px]">
-      <div className="text-center mt-6">
-        <div className="relative w-24 h-24 mx-auto"><div className="absolute inset-0 rounded-full bg-emerald-200 pulse-ring"></div><div className="relative w-24 h-24 rounded-full bg-emerald-100 grid place-items-center text-[44px]">🎉</div></div>
-        <h1 className="text-[24px] font-extrabold tracking-tight text-ink-900 mt-6">{sold ? 'Your property has been sold' : 'Sale in progress'}</h1>
-        <p className="text-[14px] text-ink-500 mt-2">{sold ? <>Congratulations! The deal for <b className="text-ink-800">{title(a)}</b> is complete.</> : <>We&apos;re finishing the last steps for <b className="text-ink-800">{title(a)}</b>.</>}</p>
+    <PageWrap className="!max-w-[1120px]">
+      <button type="button" onClick={() => router.push('/listings')} className="flex items-center gap-2 text-[13px] font-semibold text-ink-500 hover:text-brand-600 mb-2"><Icon name="arrow-left" size={16} />My Listings</button>
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+        <div className="space-y-5">
+          <Card className="p-0 overflow-hidden">
+            <PhotoPlaceholder tag={`${l._id}ls`} src={l.photos?.[0]} height={220}>
+              {sold && <span className="absolute top-4 left-4 text-[12px] font-extrabold uppercase tracking-wide text-white bg-rose-600 rounded-full px-3 py-1 shadow">Sold out</span>}
+            </PhotoPlaceholder>
+            <div className="p-5">
+              <h1 className="text-[22px] font-extrabold tracking-tight text-ink-900">{title(a)}</h1>
+              <div className="text-[13.5px] text-ink-500 flex items-center gap-1 mt-0.5"><Icon name="map-pin" size={14} />{[l.address?.locality, l.address?.city].filter(Boolean).join(', ') || '—'}</div>
+              {chips.length > 0 && <div className="flex flex-wrap gap-1.5 mt-3">{chips.map((c) => <span key={c} className="text-[12px] font-semibold text-ink-600 bg-ink-100 rounded-md px-2 py-0.5">{c}</span>)}</div>}
+            </div>
+          </Card>
+          <Card className="p-5">
+            <h3 className="text-[15px] font-bold text-ink-900 mb-3">Sale summary</h3>
+            <div className="grid sm:grid-cols-2 gap-3">
+              {summary.map(([k, v]) => <div key={k} className="rounded-xl bg-ink-50 p-3"><div className="text-[11px] font-semibold text-ink-400 uppercase tracking-wide">{k}</div><div className="text-[14px] font-bold text-ink-900 mt-0.5">{v}</div></div>)}
+            </div>
+          </Card>
+          <Card className="p-5">
+            <h3 className="text-[15px] font-bold text-ink-900 mb-4">Sale timeline</h3>
+            <div className="space-y-4">
+              {timeline.map(([t, d, done], i) => (
+                <div key={t} className="flex items-start gap-3">
+                  <div className={cx('w-7 h-7 rounded-full grid place-items-center shrink-0', done ? 'bg-emerald-500' : 'bg-ink-200')}>{done ? <Icon name="check" size={14} color="#fff" strokeWidth={3} /> : <span className="text-[11px] font-bold text-ink-500">{i + 1}</span>}</div>
+                  <div className={cx(!done && 'opacity-60')}><div className="text-[14px] font-bold text-ink-900">{t}</div><div className="text-[12.5px] text-ink-500">{d}</div></div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+        <div className="space-y-4 lg:sticky lg:top-4">
+          <Card className="p-6 text-center">
+            <div className="relative w-20 h-20 mx-auto"><div className="absolute inset-0 rounded-full bg-emerald-200 pulse-ring"></div><div className="relative w-20 h-20 rounded-full bg-emerald-100 grid place-items-center"><Icon name="circle-check" size={34} color="#059669" /></div></div>
+            <h2 className="text-[19px] font-extrabold text-ink-900 mt-4">{sold ? 'Your property has been sold' : 'Sale in progress'}</h2>
+            <p className="text-[13px] text-ink-500 mt-1">{sold ? 'Congratulations! The deal is complete.' : "We're finishing the last steps of your sale."}</p>
+            <div className="divide-y divide-ink-100 text-left mt-4 rounded-xl border border-ink-200">
+              <div className="flex items-center justify-between p-3.5"><span className="text-[13.5px] font-semibold text-ink-800">Payment</span><StatusLine ok={paid} yes="Received" no="Pending" /></div>
+              <div className="flex items-center justify-between p-3.5"><span className="text-[13.5px] font-semibold text-ink-800">Registration</span><StatusLine ok={registered} yes="Completed" no="Pending" /></div>
+            </div>
+          </Card>
+          <Card className="p-5">
+            <h3 className="text-[14px] font-bold text-ink-900 mb-3">Documents</h3>
+            {files.map(([label, kind, fallback]) => (
+              <button type="button" key={label} onClick={() => { void openSellerFile(id, kind, fallback).catch((e) => toastError(errorMessage(e, `The ${label.toLowerCase()} is not ready yet.`), 'download')); }} className="w-full flex items-center gap-3 py-2.5 text-left hover:text-brand-600 transition">
+                <div className="w-9 h-9 rounded-lg bg-brand-50 grid place-items-center shrink-0"><Icon name="file-text" size={16} color="#1A6FFF" /></div>
+                <span className="flex-1 text-[13.5px] font-semibold text-ink-800">{label}</span><Icon name="download" size={16} color="#94A3B8" />
+              </button>
+            ))}
+          </Card>
+          <Button variant="outline" className="w-full" icon="plus" onClick={() => router.push('/sell')}>List Another Property</Button>
+          <button type="button" onClick={() => router.push('/support')} className="w-full text-center text-[14px] font-semibold text-brand-600 hover:underline">Contact Builtglory</button>
+        </div>
       </div>
-      <Card className="divide-y divide-ink-100 mt-6">
-        <div className="flex items-center justify-between p-4"><span className="text-[14px] font-semibold text-ink-800">Payment</span><StatusLine ok={paid} yes="Received" no="Pending" /></div>
-        <div className="flex items-center justify-between p-4"><span className="text-[14px] font-semibold text-ink-800">Registration</span><StatusLine ok={registered} yes="Completed" no="Pending" /></div>
-      </Card>
-      <Button size="lg" className="w-full mt-5" icon="file-text" onClick={() => { void openSellerFile(id, 'sale_deed').catch((e) => toastError(errorMessage(e, 'The sale deed is not ready yet.'), 'download')); }}>Download Sale Deed</Button>
-      <button type="button" onClick={() => router.push('/support')} className="w-full text-center text-[14px] font-semibold text-brand-600 mt-4 hover:underline">Contact Builtglory</button>
     </PageWrap>
   );
 }

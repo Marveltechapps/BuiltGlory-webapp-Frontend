@@ -6,10 +6,21 @@ import type { SellRequest, SellerActivity } from '../types/sellRequest';
 import type { Visit } from '../types/visit';
 import { dateTime, shortDate } from './format';
 
-export const ENQ_STEPS = [
-  'Enquiry Submitted', 'Verification Call', 'Visit Scheduled', 'Deal Confirmed', 'Documents Shared',
-  'KYC Verified', 'Token Payment', 'Payment Method', 'Registration', 'Completed',
+import type { Tone } from '../components/ui/Tag';
+
+/** The design's 8-step buyer pipeline. `act` is the buyer's action while the step is current. */
+export interface EnqStep { t: string; note: string; act: string | null; icon: string; badge: string; tone: Tone }
+export const ENQ_STEPS: EnqStep[] = [
+  { t: 'Enquiry Submitted', note: 'Advisor will call you to verify', act: 'Request Callback', icon: 'phone-call', badge: 'submitted', tone: 'amber' },
+  { t: 'Verification Call', note: 'Advisor confirmed your interest', act: 'Schedule Visit', icon: 'calendar', badge: 'verified', tone: 'brand' },
+  { t: 'Visit Scheduled', note: 'Site visit with the owner', act: 'Confirm Deal', icon: 'handshake', badge: 'visit scheduled', tone: 'brand' },
+  { t: 'Deal Confirmed', note: 'Price agreed with the seller', act: 'Complete KYC', icon: 'shield-check', badge: 'documents', tone: 'brand' },
+  { t: 'KYC Verified', note: 'Aadhaar & PAN verified', act: 'Pay Token Amount', icon: 'wallet', badge: 'kyc verified', tone: 'green' },
+  { t: 'Token Payment', note: 'Booking amount to block the property', act: 'View Appointment', icon: 'landmark', badge: 'token paid', tone: 'green' },
+  { t: 'Registration', note: 'Sub-registrar appointment & sale deed', act: 'Mark as Registered', icon: 'file-text', badge: 'registration', tone: 'brand' },
+  { t: 'Completed', note: 'Property handed over', act: null, icon: 'circle-check', badge: 'completed', tone: 'green' },
 ];
+export const ENQ_LAST = ENQ_STEPS.length - 1;
 
 export const activeVisits = (visits: Visit[] = []) => visits.filter((v) => !['cancelled', 'missed'].includes(v.status));
 
@@ -26,47 +37,53 @@ export const enquiryGroup = (e: BuyEnquiry): EnquiryGroup => {
   return 'active';
 };
 
-/** Index of the step in progress (ENQ_STEPS.length when everything is done). */
+export const tokenPaid = (e: BuyEnquiry) => Boolean(e.deal?.financials?.tokenPaid);
+export const registrationOf = (e: BuyEnquiry) => e.deal?.documentation?.workflow?.registration ?? null;
+
+/** Index of the step in progress (ENQ_LAST once the deal is closed). Backend state drives it; buyer actions only send requests. */
 export const enquiryStepIndex = (e: BuyEnquiry, kycVerified: boolean) => {
   const stage = e.deal?.stage;
-  if (enquiryGroup(e) === 'completed') return ENQ_STEPS.length;
-  if (stage === 'documentation') return 8;
-  if (stage === 'full_payment' || stage === 'stage_payment' || stage === 'interior_design') return 7;
-  if (stage === 'token_payment') return kycVerified ? 6 : 5;
+  if (enquiryGroup(e) === 'completed') return ENQ_LAST;
+  if (stage === 'documentation') return 6;
+  if (tokenPaid(e) || stage === 'full_payment' || stage === 'stage_payment' || stage === 'interior_design') return 5;
+  if (stage === 'token_payment') return kycVerified ? 4 : 3;
   if (stage === 'negotiation' || stage === 're_engagement' || e.status === 'negotiating') return 3;
-  if (activeVisits(e.visits).length || e.status === 'visit_scheduled' || e.status === 'responded' || stage === 'active_leads' || stage === 'site_visits') return 2;
-  return 1;
+  if (activeVisits(e.visits).length || e.status === 'visit_scheduled' || stage === 'site_visits') return 2;
+  if (e.status === 'responded' || stage === 'active_leads') return 1;
+  return 0;
 };
 
+/** Timestamp / detail lines shown under finished steps. */
 export const enquiryStepNotes = (e: BuyEnquiry): Record<number, { at?: string; note?: string }> => {
-  const v = nextVisit(e);
+  const v = nextVisit(e) ?? activeVisits(e.visits).find((x) => x.status === 'completed');
+  const reg = registrationOf(e);
+  const agreed = e.deal?.financials?.agreedPrice ?? e.deal?.financials?.offeredPrice;
   return {
     0: { at: dateTime(e.submittedAt || e.createdAt) },
-    1: e.status !== 'new' ? { note: 'Advisor confirmed your interest' } : {},
     2: v ? { at: `${shortDate(v.visitDate)} · ${v.visitTime ?? ''}`.trim() } : {},
+    3: agreed ? { note: `Agreed at ₹ ${agreed.toLocaleString('en-IN')}` } : {},
+    5: e.deal?.financials?.tokenAmount && tokenPaid(e) ? { note: `₹ ${e.deal.financials.tokenAmount.toLocaleString('en-IN')} paid` } : {},
+    6: reg?.date ? { note: [reg.office, reg.sub].filter(Boolean).join(' · ') || undefined, at: shortDate(reg.date) } : {},
   };
 };
 
-export const enquiryBadge = (e: BuyEnquiry): { label: string; tone: 'brand' | 'amber' | 'green' | 'rose' } => {
+export const enquiryBadge = (e: BuyEnquiry, kycVerified = false): { label: string; tone: Tone } => {
   const g = enquiryGroup(e);
   if (g === 'completed') return { label: 'completed', tone: 'green' };
   if (g === 'cancelled') return { label: 'cancelled', tone: 'rose' };
-  if (e.deal && e.customerStageLabel) return { label: e.customerStageLabel.toLowerCase(), tone: 'brand' };
-  if (e.status === 'visit_scheduled' || activeVisits(e.visits).length) return { label: 'visit scheduled', tone: 'brand' };
-  if (e.status === 'new') return { label: 'awaiting', tone: 'amber' };
-  return { label: e.status.replace(/_/g, ' '), tone: 'brand' };
+  const s = ENQ_STEPS[enquiryStepIndex(e, kycVerified)]!;
+  return { label: s.badge, tone: s.tone };
 };
 
-export const enquiryNote = (e: BuyEnquiry) => {
+export const enquiryNote = (e: BuyEnquiry, kycVerified = false) => {
   const g = enquiryGroup(e);
-  if (g === 'completed') return 'Deal completed';
+  if (g === 'completed') return 'Enquiry completed — property registered';
   if (g === 'cancelled') return 'Enquiry cancelled';
-  if (e.deal && e.customerStageLabel) return `Deal stage: ${e.customerStageLabel}`;
+  const i = enquiryStepIndex(e, kycVerified);
   const v = nextVisit(e);
-  if (v) return `Visit on ${shortDate(v.visitDate)}${v.visitTime ? ` ${v.visitTime}` : ''}`;
-  if (e.status === 'new') return 'Awaiting callback from advisor';
-  if (e.status === 'responded') return 'Advisor responded to your enquiry';
-  return 'Negotiation in progress';
+  if (i === 2 && v) return `Visit on ${shortDate(v.visitDate)}${v.visitTime ? ` ${v.visitTime}` : ''}`;
+  if (i === 0) return 'Awaiting callback from advisor';
+  return `Next: ${ENQ_STEPS[i]?.act ?? ENQ_STEPS[i]?.t}`;
 };
 
 export const LISTING_STEPS: Array<{ t: string; note: string }> = [
@@ -108,13 +125,18 @@ export const listingStepIndex = (sr: SellRequest, a?: SellerActivity | null) => 
   return 1;
 };
 
-export type ListingGroup = 'active' | 'sold' | 'withdrawn' | 'draft';
+/** My Listings tabs: `upcoming` = submitted and still in verification, `active` = live on the marketplace. */
+export type ListingGroup = 'active' | 'upcoming' | 'sold' | 'withdrawn' | 'draft';
 export const listingGroup = (sr: SellRequest): ListingGroup => {
   if (sr.status === 'sold') return 'sold';
   if (sr.status === 'paused' || sr.status === 'rejected') return 'withdrawn';
   if (sr.status === 'draft') return 'draft';
-  return 'active';
+  if (sr.status === 'active' || sr.status === 'negotiating') return 'active';
+  return 'upcoming';
 };
+
+/** A draft the seller deleted from My Listings (withdrawn before it was ever submitted). */
+export const isDiscardedDraft = (sr: SellRequest) => sr.status === 'paused' && !sr.submittedAt;
 
 /** Seller-side deal screen for a listing whose offer was accepted. */
 export const sellerDealRoute = (id: string, a: SellerActivity) => {

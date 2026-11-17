@@ -11,6 +11,8 @@ export interface LinkedDeal {
   referenceId?: string;
   stage?: string;
   financials?: { offeredPrice?: number; agreedPrice?: number; tokenAmount?: number; tokenPaid?: boolean; paymentType?: 'full' | 'stage' | null; totalPaid?: number };
+  /** Free-form workflow data the admin dashboard keeps on the deal; `workflow.registration` is the sub-registrar appointment. */
+  documentation?: { workflow?: { registration?: { date?: string; office?: string; sub?: string; done?: boolean } } } & Record<string, unknown>;
   propertySnapshot?: { title?: string; price?: number; type?: string; location?: string };
   closedAt?: string;
   updatedAt?: string;
@@ -58,6 +60,8 @@ export interface CustomerDeal {
 
 export interface CreateEnquiryPayload {
   propertyId: string;
+  /** Free-form tags (≤ 80 chars each) — carries the design's Interest / Budget / Planning-to-buy picks. */
+  enquiryTypes?: string[];
   preferredContact: PreferredContact;
   interestType: InterestType;
   preferredVisitTime?: PreferredVisitTime | null;

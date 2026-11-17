@@ -71,13 +71,25 @@ export interface ContentItem {
   publishedAt?: string;
 }
 
+/** Builtglory escrow account (admin settings → payment.escrow). */
+export interface EscrowAccount {
+  accountHolder?: string;
+  bankName?: string;
+  accountNumber?: string;
+  ifsc?: string;
+  branch?: string;
+  upiId?: string;
+  chequePayee?: string;
+  chequeInstructions?: string[];
+}
+
 /** `GET /api/v1/app/config` (appConfig/service.js). */
 export interface AppConfig {
   versions?: { current?: string; minimumSupported?: string; latest?: string };
   storeUrls?: { ios?: string | null; android?: string | null };
   maintenance?: { enabled?: boolean; message?: string; expectedBackAt?: string | null };
   featureFlags?: Record<string, unknown>;
-  payment?: { tokenAmount?: number; escrow?: unknown };
+  payment?: { tokenAmount?: number; escrow?: EscrowAccount | null };
   support?: {
     phone?: string;
     supportPhone?: string;

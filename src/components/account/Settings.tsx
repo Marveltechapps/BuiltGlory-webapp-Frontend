@@ -12,8 +12,7 @@ import { useBack } from '../../hooks/useNavigation';
 import { getMe, updateMe } from '../../services/userService';
 import { errorMessage } from '../../services/api';
 import { readPref, writePref } from '../../lib/authStorage';
-import { LiveMap } from '../ui/LiveMap';
-import { cityCenter, nearestCity } from '../../lib/catalog';
+import { nearestCity } from '../../lib/catalog';
 import { cx } from '../../lib/format';
 import { displayName, mobileOf } from '../../lib/user';
 import type { ChannelPreference, NotificationPreferences, PreferenceChannel } from '../../types/user';
@@ -43,7 +42,7 @@ export function Settings() {
       <Sec title="Account">
         <Row icon="user-cog" title="Account Settings" sub="Profile, phone number, session" onClick={() => go('/settings/account')} />
         <Row icon="bell" title="Notification Settings" sub="Push, WhatsApp, SMS, email" onClick={() => go('/settings/notifications')} />
-        <Row icon="sliders-horizontal" title="App Settings" sub="Location" onClick={() => go('/settings/app', false)} />
+        <Row icon="sliders-horizontal" title="App Settings" sub="Language, location" onClick={() => go('/settings/app', false)} />
         <Row icon="lock" title="Privacy & data" sub="Control how your data is used" onClick={() => go('/settings/privacy')} />
       </Sec>
       <Sec title="Support">
@@ -140,9 +139,17 @@ export function AppSettings() {
   const { toast, toastError } = useToast();
   const [loc, setLoc] = useState(() => readPref('location') || 'gps');
   const [locating, setLocating] = useState(false);
-  const [live, setLive] = useState<{ latitude: number; longitude: number } | null>(null);
-  const saved = typeof user?.latitude === 'number' && typeof user?.longitude === 'number' ? { latitude: user.latitude, longitude: user.longitude } : null;
-  const shown = live ?? saved;
+  const saved = user?.preferences?.language;
+  const [lang, setLang] = useState<string>(() => (saved === 'ta' || saved === 'Tamil' ? 'Tamil' : saved ? 'English' : readPref('language') || 'English'));
+
+  const pickLang = (l: 'English' | 'Tamil') => {
+    const prev = lang;
+    setLang(l);
+    writePref('language', l);
+    toast(`Language: ${l}`);
+    if (!signedIn) return;
+    updateMe({ preferences: { language: l } }).then(setUser).catch((e) => { setLang(prev); toastError(errorMessage(e, 'Could not save your language.')); });
+  };
 
   const useGps = () => requireAuth(() => {
     if (!navigator.geolocation) { toastError('GPS is not available on this device', 'crosshair'); return; }
@@ -150,7 +157,6 @@ export function AppSettings() {
     toast('Detecting your location…', 'crosshair');
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const { latitude, longitude } = pos.coords;
-      setLive({ latitude, longitude });
       try {
         setUser(await updateMe({ latitude, longitude, city: nearestCity(latitude, longitude) }));
         toast(`Location updated · ${nearestCity(latitude, longitude)}`, 'map-pin');
@@ -162,10 +168,11 @@ export function AppSettings() {
   return (
     <PageWrap className="!max-w-[1120px] web-split">
       <button type="button" onClick={back} className="flex items-center gap-2 text-[17px] font-extrabold tracking-tight text-ink-900 mb-6"><Icon name="arrow-left" size={19} />App Settings</button>
-      <div className="text-[12px] font-semibold text-ink-400 uppercase tracking-wide mb-2">Location</div>
-      <div className="relative mb-4">
-        <LiveMap height={240} className="rounded-2xl border border-ink-200" pins={shown ? [{ id: 'me', ...shown, label: 'You' }] : []} center={shown ?? cityCenter(user?.city)} />
+      <div className="text-[12px] font-semibold text-ink-400 uppercase tracking-wide mb-2">Language</div>
+      <div className="grid grid-cols-2 gap-3">
+        {(['English', 'Tamil'] as const).map((l) => <button type="button" key={l} onClick={() => pickLang(l)} className={cx('h-14 rounded-2xl text-[15px] font-bold border transition', lang === l ? 'bg-brand-50 border-brand-500 text-brand-700 ring-2 ring-brand-100' : 'bg-white border-ink-200 text-ink-700 hover:border-brand-300')}>{l}</button>)}
       </div>
+      <div className="text-[12px] font-semibold text-ink-400 uppercase tracking-wide mt-6 mb-2">Location</div>
       <div className="space-y-3">
         {([['gps', 'crosshair', 'Use GPS', 'Auto-detect my location', useGps], ['manual', 'map-pin', 'Manual entry', 'Pick city and area myself', useManual]] as const).map(([id, ic, t, sub, fn]) => (
           <button type="button" key={id} onClick={fn} disabled={locating && id === 'gps'} className={cx('w-full flex items-center gap-3.5 rounded-2xl border p-4 text-left transition', loc === id ? 'bg-brand-50 border-brand-500 ring-2 ring-brand-100' : 'bg-white border-ink-200 hover:border-brand-300')}>

@@ -43,6 +43,8 @@ export function VisitScheduler({ propertyId, enquiryId, visitId, visitType = 'ph
   const [sel, setSel] = useState<string | null>(null);
   const [slot, setSlot] = useState<string | null>(null);
   const [rescheduleId, setRescheduleId] = useState<string | undefined>(visitId);
+  const [vType, setVType] = useState<VisitType>(visitType);
+  const [guests, setGuests] = useState(1);
   const [done, setDone] = useState<Visit | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function VisitScheduler({ propertyId, enquiryId, visitId, visitType = 'ph
   const from = monthStart < first ? first : monthStart;
   const to = monthEnd > last ? last : monthEnd;
   const span = dayDiff(from, to) + 1;
-  const availability = useApiQuery((signal) => getVisitAvailability(propertyId, visitType, isoDay(from.getFullYear(), from.getMonth(), from.getDate()), Math.min(Math.max(span, 1), 30), signal), [propertyId, visitType, view.y, view.m], span > 0);
+  const availability = useApiQuery((signal) => getVisitAvailability(propertyId, vType, isoDay(from.getFullYear(), from.getMonth(), from.getDate()), Math.min(Math.max(span, 1), 30), signal), [propertyId, vType, view.y, view.m], span > 0);
 
   if (property.loading || enquiries.loading) return <PageLoading label="Loading visit slots" />;
   if (property.error || !property.data) return <PageError message={property.error ?? 'Property not found.'} onRetry={property.reload} />;
@@ -94,9 +96,9 @@ export function VisitScheduler({ propertyId, enquiryId, visitId, visitType = 'ph
     try {
       const visit = rescheduleId
         ? await rescheduleVisit(rescheduleId, selected, chosenSlot)
-        : await createVisit({ propertyId: p._id, enquiryId: enquiry?._id, visitDate: selected, visitTime: chosenSlot, visitType });
+        : await createVisit({ propertyId: p._id, enquiryId: enquiry?._id, visitDate: selected, visitTime: chosenSlot, visitType: vType });
       setDone(visit);
-      toast(rescheduleId ? 'Visit rescheduled' : 'Visit confirmed');
+      toast(rescheduleId ? 'Visit rescheduled' : 'Visit scheduled');
       enquiries.reload();
       availability.reload();
     } catch (e) {
@@ -106,17 +108,25 @@ export function VisitScheduler({ propertyId, enquiryId, visitId, visitType = 'ph
     }
   };
 
+  const resched = !!rescheduleId;
+  const summary = (
+    <div className="flex items-center gap-3 rounded-2xl bg-ink-50 p-3 mb-5">
+      <PhotoPlaceholder tag={p._id} src={propertyPhotos(p)[0]} className="rounded-xl shrink-0" style={{ width: 52, height: 52 }} />
+      <div className="min-w-0"><div className="text-[14px] font-bold text-ink-900 truncate">{p.title}</div><div className="text-[12px] text-ink-400">{propertyLocation(p)}</div><div className="text-[13px] font-semibold text-brand-600">{formatINR(p.price)}</div></div>
+    </div>
+  );
+
   if (done) return (
     <PageWrap className="!max-w-[540px]">
       <Card className="p-7 text-center mt-6">
         <div className="w-20 h-20 rounded-full bg-brand-50 grid place-items-center mx-auto"><Icon name="calendar-check" size={36} color="#1A6FFF" /></div>
-        <h1 className="text-[24px] font-extrabold tracking-tight text-ink-900 mt-5">Visit confirmed!</h1>
-        <p className="text-[14px] text-ink-500 mt-2">We&apos;ve added it to My Visits.</p>
+        <h1 className="text-[24px] font-extrabold tracking-tight text-ink-900 mt-5">{resched ? 'Visit rescheduled!' : 'Visit scheduled!'}</h1>
+        <p className="text-[14px] text-ink-500 mt-2">{resched ? 'The seller has been notified of your new time.' : "We've added it to your calendar. Track it in My Visits."}</p>
         <div className="rounded-2xl border border-ink-200 overflow-hidden mt-6 text-left">
           <div className="bg-brand-600 text-white p-4">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-white/70">Your visit</div>
             <div className="text-[20px] font-extrabold mt-0.5">{longDate(parseIso(done.visitDate))}</div>
-            <div className="text-[13px] text-white/90">{done.visitTime}</div>
+            <div className="text-[13px] text-white/90">{[done.visitTime, (done.visitType ?? vType) === 'virtual' ? 'Video tour' : 'In-person'].filter(Boolean).join(' · ')}</div>
           </div>
           <div className="p-4 flex gap-3 items-center border-b border-ink-100">
             <PhotoPlaceholder tag={p._id} src={propertyPhotos(p)[0]} className="rounded-xl shrink-0" style={{ width: 52, height: 52 }} />
@@ -129,21 +139,34 @@ export function VisitScheduler({ propertyId, enquiryId, visitId, visitType = 'ph
         </div>
         <div className="grid grid-cols-2 gap-3 mt-5">
           <Button variant="outline" icon="map-pin" onClick={() => window.open(mapsUrl(p), '_blank', 'noopener,noreferrer')}>Directions</Button>
-          <Button variant="outline" icon="calendar" onClick={() => { setRescheduleId(done._id); setDone(null); setSel(null); setSlot(null); }}>Reschedule</Button>
+          <Button variant="outline" icon="calendar" onClick={() => { setRescheduleId(done._id); setDone(null); setSel(null); setSlot(null); }}>Change Time</Button>
         </div>
-        <Button size="lg" className="w-full mt-3" onClick={() => router.push('/visits')}>Done</Button>
+        <Button size="lg" className="w-full mt-3" icon="calendar-check" onClick={() => router.push('/visits')}>Go to My Visits</Button>
       </Card>
     </PageWrap>
   );
 
   return (
     <PageWrap className="!max-w-[560px]">
-      <button type="button" onClick={back} className="flex items-center gap-2 text-[13.5px] font-semibold text-ink-500 hover:text-brand-600 mb-4"><Icon name="arrow-left" size={16} />Schedule Visit</button>
+      <button type="button" onClick={back} className="flex items-center gap-2 text-[13.5px] font-semibold text-ink-500 hover:text-brand-600 mb-4"><Icon name="arrow-left" size={16} />{resched ? 'Reschedule Visit' : 'Schedule Visit'}</button>
       <Card className="p-6">
-        {existing && (
+        {summary}
+        {resched ? (
           <div className="flex items-center gap-3 rounded-2xl bg-amber-50 border border-amber-200 p-3.5 mb-5">
             <Icon name="calendar-clock" size={20} color="#D97706" className="shrink-0" />
-            <div><div className="text-[13px] font-bold text-amber-700">Current booking</div><div className="text-[12.5px] text-amber-600">{longDate(parseIso(existing.visitDate))}{existing.visitTime ? ` · ${existing.visitTime}` : ''}</div></div>
+            <div><div className="text-[13px] font-bold text-amber-700">Current booking</div><div className="text-[12.5px] text-amber-600">{existing ? `${longDate(parseIso(existing.visitDate))}${existing.visitTime ? ` · ${existing.visitTime}` : ''}` : '—'}</div></div>
+          </div>
+        ) : (
+          <div className="mb-5">
+            <div className="text-[13px] font-bold text-ink-800 mb-2.5">Visit type</div>
+            <div className="grid grid-cols-2 gap-2.5">
+              {([['In-person', 'physical', 'map-pin', 'Visit the site with an advisor'], ['Video tour', 'virtual', 'video', 'Live walkthrough on video call']] as const).map(([t, v, ic, d]) => (
+                <button type="button" key={t} onClick={() => { setVType(v); setSlot(null); }} className={cx('rounded-xl border p-3.5 text-left flex items-start gap-3 transition', vType === v ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-100' : 'border-ink-200 hover:border-brand-300')}>
+                  <Icon name={ic} size={18} color={vType === v ? '#1A6FFF' : '#64748B'} className="mt-0.5 shrink-0" />
+                  <div><div className={cx('text-[13.5px] font-bold', vType === v ? 'text-brand-700' : 'text-ink-800')}>{t}</div><div className="text-[11.5px] text-ink-500">{d}</div></div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
         <div className="flex items-center justify-between mb-3">
@@ -169,7 +192,17 @@ export function VisitScheduler({ propertyId, enquiryId, visitId, visitType = 'ph
               {slots.map((s) => <button type="button" key={s.time} disabled={!s.available} onClick={() => setSlot(s.time)} className={cx('h-11 rounded-xl text-[12.5px] font-semibold border transition disabled:opacity-40 disabled:line-through', chosenSlot === s.time ? 'bg-brand-50 border-brand-500 text-brand-700 ring-2 ring-brand-100' : 'bg-white border-ink-200 text-ink-700 hover:border-brand-300')}>{s.time}</button>)}
             </div>
           )}
-        <div className="mt-5 p-3.5 rounded-xl bg-ink-50 flex items-center gap-2 text-[13px] text-ink-600"><Icon name="calendar-check" size={16} color="#1A6FFF" />New visit: <b className="text-ink-900">{selLabel}{chosenSlot ? ` at ${chosenSlot}` : ''}</b></div>
+        {!resched && vType === 'physical' && (
+          <div className="flex items-center justify-between rounded-xl border border-ink-200 p-3.5 mt-5">
+            <div><div className="text-[13.5px] font-bold text-ink-900">Visitors</div><div className="text-[12px] text-ink-500">Including you</div></div>
+            <div className="flex items-center gap-3">
+              <button type="button" aria-label="Fewer visitors" onClick={() => setGuests((g) => Math.max(1, g - 1))} className="w-8 h-8 rounded-lg border border-ink-200 grid place-items-center hover:bg-ink-50"><Icon name="minus" size={15} /></button>
+              <span className="w-5 text-center text-[14px] font-bold text-ink-900">{guests}</span>
+              <button type="button" aria-label="More visitors" onClick={() => setGuests((g) => Math.min(5, g + 1))} className="w-8 h-8 rounded-lg border border-ink-200 grid place-items-center hover:bg-ink-50"><Icon name="plus" size={15} /></button>
+            </div>
+          </div>
+        )}
+        <div className="mt-5 p-3.5 rounded-xl bg-ink-50 flex items-center gap-2 text-[13px] text-ink-600"><Icon name="calendar-check" size={16} color="#1A6FFF" />{resched ? 'New time' : 'Your visit'}: <b className="text-ink-900">{selLabel}{chosenSlot ? ` at ${chosenSlot}` : ''}</b></div>
         <FormError message={formError} />
         <Button size="lg" className="w-full mt-5" loading={saving} disabled={!selected || !chosenSlot} onClick={() => void confirm()}>{rescheduleId ? 'Confirm Reschedule' : 'Confirm Visit'}</Button>
       </Card>

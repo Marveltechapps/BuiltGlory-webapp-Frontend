@@ -2,6 +2,15 @@
 // Keys are the kebab-case ids used throughout the design. Unknown ids render a blank span, like the reference Icon.
 import type { IconNode } from 'lucide';
 import {
+  Apple,
+  AtSign,
+  Chrome,
+  CreditCard,
+  ScanLine,
+  Upload,
+  VolumeX,
+} from 'lucide';
+import {
   AirVent,
   Archive,
   ArrowLeft,
@@ -159,10 +168,12 @@ import {
 
 export const ICONS: Record<string, IconNode> = {
   'air-vent': AirVent,
+  'apple': Apple,
   'archive': Archive,
   'arrow-left': ArrowLeft,
   'arrow-right': ArrowRight,
   'arrow-up-down': ArrowUpDown,
+  'at-sign': AtSign,
   'baby': Baby,
   'badge-check': BadgeCheck,
   'badge-indian-rupee': BadgeIndianRupee,
@@ -190,6 +201,7 @@ export const ICONS: Record<string, IconNode> = {
   'chevron-left': ChevronLeft,
   'chevron-right': ChevronRight,
   'chevron-up': ChevronUp,
+  'chrome': Chrome,
   'circle': Circle,
   'circle-alert': CircleAlert,
   'circle-check': CircleCheck,
@@ -200,6 +212,7 @@ export const ICONS: Record<string, IconNode> = {
   'cloud-rain': CloudRain,
   'compass': Compass,
   'cooking-pot': CookingPot,
+  'credit-card': CreditCard,
   'cross': Cross,
   'crosshair': Crosshair,
   'crown': Crown,
@@ -271,6 +284,7 @@ export const ICONS: Record<string, IconNode> = {
   'save': Save,
   'scale': Scale,
   'scan': Scan,
+  'scan-line': ScanLine,
   'school': School,
   'search': Search,
   'search-x': SearchX,
@@ -297,12 +311,14 @@ export const ICONS: Record<string, IconNode> = {
   'triangle-alert': TriangleAlert,
   'type': Type,
   'umbrella': Umbrella,
+  'upload': Upload,
   'user': User,
   'user-cog': UserCog,
   'user-round': UserRound,
   'users': Users,
   'video': Video,
   'volume-2': Volume2,
+  'volume-x': VolumeX,
   'wallet': Wallet,
   'warehouse': Warehouse,
   'waves': Waves,
@@ -310,5 +326,5 @@ export const ICONS: Record<string, IconNode> = {
   'x': X,
   'zap': Zap,
   'zoom-in': ZoomIn,
-  'zoom-out': ZoomOut
+  'zoom-out': ZoomOut,
 };

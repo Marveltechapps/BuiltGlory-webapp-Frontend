@@ -21,8 +21,7 @@ import { sendCustomerOtp, verifyCustomerOtp } from '../../services/authService';
 import { updateMe } from '../../services/userService';
 import { uploadDocument } from '../../services/documentService';
 import { errorMessage } from '../../services/api';
-import { LiveMap } from '../ui/LiveMap';
-import { CITIES, ONBOARDING_SLIDES, cityCenter } from '../../lib/catalog';
+import { CITIES, ONBOARDING_SLIDES } from '../../lib/catalog';
 import { reverseGeocode } from '../../services/geoService';
 import { cx, digits, firstName, initials } from '../../lib/format';
 import type { CustomerRole, UserType } from '../../types/user';
@@ -195,6 +194,12 @@ export function Onboarding({ startStage }: { startStage?: string }) {
           </FieldRow>
           <FormError message={err} />
           <Button size="lg" className="w-full mt-4" iconRight="arrow-right" loading={busy} disabled={phone.length !== 10} onClick={() => void sendOtp()}>Continue</Button>
+          <div className="flex items-center gap-3 my-5"><div className="flex-1 h-px bg-ink-200"></div><span className="text-[12px] text-ink-400">or</span><div className="flex-1 h-px bg-ink-200"></div></div>
+          <div className="grid grid-cols-2 gap-3">
+            {([['chrome', 'Google'], ['apple', 'Apple']] as const).map(([ic, n]) => (
+              <Button key={n} variant="outline" onClick={() => toast(`${n} sign-in isn't available yet — continue with your mobile number`, 'info')}><Icon name={ic} size={17} />{n}</Button>
+            ))}
+          </div>
         </div>
         <p className="text-[11.5px] text-ink-400 text-center mt-6 leading-relaxed">By continuing you agree to our <button type="button" onClick={() => setLegalDoc('Terms of Service')} className="text-brand-600 font-medium hover:underline">Terms</button> & <button type="button" onClick={() => setLegalDoc('Privacy Policy')} className="text-brand-600 font-medium hover:underline">Privacy Policy</button>.</p>
         <LegalModal doc={legalDoc} onClose={() => setLegalDoc(null)} onSwitch={setLegalDoc} />
@@ -304,12 +309,6 @@ export function Onboarding({ startStage }: { startStage?: string }) {
             </div>
             <div className="mt-3"><div className="text-[11.5px] text-ink-400 mb-1.5">Popular cities</div><div className="flex flex-wrap gap-2">{CITIES.slice(0, 6).map((c) => <Pill key={c} active={form.city === c} onClick={() => pickCity(c)}>{c}</Pill>)}</div></div>
             <div className="text-[12.5px] text-ink-500 mt-3">Selected city: <b className="text-ink-900">{form.city}</b></div>
-            <LiveMap
-              height={180}
-              className="rounded-2xl border border-ink-200 mt-3"
-              pins={geo.latitude != null && geo.longitude != null ? [{ id: 'me', latitude: geo.latitude, longitude: geo.longitude, label: 'You' }] : []}
-              center={(geo.latitude != null && geo.longitude != null ? { latitude: geo.latitude, longitude: geo.longitude } : null) ?? cityCenter(form.city)}
-            />
             <div className="text-[13px] font-bold text-ink-800 mt-6 mb-2">I am a</div>
             <div className="grid grid-cols-2 gap-2.5">{ROLES.map(([r, ic, sub]) => (
               <button type="button" key={r} onClick={() => setForm((o) => ({ ...o, role: r }))} className={cx('rounded-2xl border p-3.5 text-left transition', form.role === r ? 'border-brand-600 bg-brand-50 ring-2 ring-brand-100' : 'border-ink-200 hover:border-brand-300')}>

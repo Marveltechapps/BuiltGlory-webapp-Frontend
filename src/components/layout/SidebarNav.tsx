@@ -78,7 +78,7 @@ export function SidebarNav({ onClose, onAuth }: SidebarProps) {
         <div className="shrink-0 border-t border-ink-100 p-3 flex items-center gap-1">
           <button type="button" onClick={goProfile} className="flex-1 min-w-0 flex items-center gap-3 p-2 rounded-xl hover:bg-ink-100 transition">
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 grid place-items-center text-white text-[13px] font-bold shrink-0">{initials(displayName(user))}</div>
-            <div className="min-w-0 text-left"><div className="text-[13px] font-semibold text-ink-900 truncate">{displayName(user)}</div><div className="text-[11px] text-ink-400 truncate">{[roleLabel(user), user?.city].filter(Boolean).join(' · ')}</div></div>
+            <div className="min-w-0 text-left"><div className="text-[13px] font-semibold text-ink-900 truncate">{displayName(user)}</div><div className="text-[11px] text-ink-400 truncate">{user?.city || roleLabel(user)}</div></div>
           </button>
           <button type="button" onClick={() => { onClose?.(); openLogout(); }} title="Log out" className="w-9 h-9 shrink-0 grid place-items-center rounded-xl text-ink-400 hover:bg-rose-50 hover:text-rose-600 transition"><Icon name="log-out" size={17} /></button>
         </div>

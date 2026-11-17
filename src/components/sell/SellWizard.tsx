@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '../ui/Icon';
 import { Pill } from '../ui/Tag';
@@ -9,20 +9,20 @@ import { Card, Toggle } from '../ui/Card';
 import { PageWrap } from '../ui/PageWrap';
 import { CoverImg, PhotoPlaceholder } from '../ui/Photo';
 import { FieldRow, FormError, TextInput } from '../ui/FormFields';
-import { Loading } from '../ui/StateViews';
+import { Loading, PageError, PageLoading } from '../ui/StateViews';
 import { useProperties } from '../../hooks/useProperties';
 import { useSession } from '../../context/SessionContext';
 import { useToast } from '../../context/ToastContext';
-import { createSellDraft, getMarketEstimate, submitSellRequest, updateSellRequest } from '../../services/sellRequestService';
+import { createSellDraft, getMarketEstimate, getSellRequest, submitSellRequest, updateSellRequest } from '../../services/sellRequestService';
 import { uploadDocument } from '../../services/documentService';
 import { updateMe } from '../../services/userService';
 import { reverseGeocode } from '../../services/geoService';
 import { errorMessage } from '../../services/api';
 import { LiveMap } from '../ui/LiveMap';
-import { AGES, BHKS, FACINGS, FURNISHINGS, OWNERSHIPS, PARKING_TYPES, PROPERTY_TYPES, SELL_AMENITIES, SUBTYPES, cityCenter, typeById } from '../../lib/catalog';
+import { AGES, BHKS, FACINGS, FURNISHINGS, OWNERSHIPS, PARKING_TYPES, PROPERTY_TYPES, SELL_AMENITIES, SUBTYPES, cityCenter, typeByApi, typeById } from '../../lib/catalog';
 import { AREA_MIN, PRICE_MIN, basicReady, detailsReady, sellKind } from '../../lib/sellCategory';
 import { cx, formatINR } from '../../lib/format';
-import type { MarketEstimate, SellRequestPayload } from '../../types/sellRequest';
+import type { MarketEstimate, SellRequest, SellRequestPayload } from '../../types/sellRequest';
 
 const STEPS = ['Basic Details', 'Location & Address', 'Property Details', 'Amenities', 'Add Photos', 'Expected Price'];
 const MIN_PHOTOS = 5; // sellRequests/validationRules.js SELL_LIMITS.photosMin
@@ -38,6 +38,27 @@ interface Form {
 interface Photo { key: string; url?: string; preview: string; uploading: boolean }
 
 const n = (v: string) => parseInt(v.replace(/\D/g, ''), 10) || 0;
+const str = (v: unknown) => (v === null || v === undefined ? '' : String(v));
+
+/** Rebuilds the wizard form from a saved draft (inverse of `payload()`). */
+function formFromDraft(sr: SellRequest, base: Form): Form {
+  const s = sr.specifications ?? {};
+  const bhk = str(s.bhk);
+  return {
+    ...base,
+    title: sr.propertyTitle ?? '',
+    subType: str(s.subType),
+    bhk: bhk ? (/bhk|studio/i.test(bhk) ? bhk : `${bhk} BHK`) : base.bhk,
+    builtup: str(s.builtUpArea), carpet: str(s.carpetArea), floor: str(s.floor), totalFloors: str(s.totalFloors), unit: str(s.unitNo),
+    age: str(s.propertyAge) || base.age,
+    plotArea: str(s.plotArea), share: str(s.sharePercentage), totalValue: str(s.totalPropertyValue), scope: str(s.scopeOfWork),
+    suitableFor: str(s.commercialType), roadWidth: str(s.roadWidth), approval: str(s.approvalType), furnishDetails: str(s.furnishDetails),
+    building: sr.address?.street ?? '', area: sr.address?.locality ?? '', city: sr.address?.city || base.city, pincode: sr.address?.pincode ?? '',
+    facing: str(s.facing) || base.facing, ownership: sr.ownershipType || base.ownership, furnishing: str(s.furnishing) || base.furnishing,
+    parking: typeof s.parking === 'number' ? s.parking : base.parking, parkingType: str(s.parkingType),
+    price: sr.askingPrice ? String(sr.askingPrice) : '', negotiable: sr.negotiable ?? base.negotiable,
+  };
+}
 
 function PillRow({ options, value, onPick }: { options: string[]; value: string; onPick: (v: string) => void }) {
   return <div className="flex flex-wrap gap-2">{options.map((o) => <Pill key={o} active={value === o} onClick={() => onPick(o)}>{o}</Pill>)}</div>;
@@ -63,14 +84,15 @@ function RecentlySold() {
   );
 }
 
-export function SellWizard() {
+export function SellWizard({ draftId: resumeId }: { draftId?: string }) {
   const router = useRouter();
   const { user, setUser, requireAuth } = useSession();
   const { toast } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(0);
   const [type, setType] = useState<string | null>(null);
-  const [picking, setPicking] = useState(true);
+  const [picking, setPicking] = useState(!resumeId);
+  const [resume, setResume] = useState<{ loading: boolean; error: string | null }>({ loading: !!resumeId, error: null });
   const [f, setF] = useState<Form>({
     title: '', subType: '', bhk: '3 BHK', builtup: '', carpet: '', floor: '', totalFloors: '', unit: '', age: '1–5 years',
     plotArea: '', share: '', totalValue: '', scope: '', suitableFor: '', roadWidth: '', approval: '', furnishDetails: '',
@@ -85,6 +107,27 @@ export function SellWizard() {
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const [resumeTry, setResumeTry] = useState(0);
+  useEffect(() => {
+    if (!resumeId) return;
+    const ctrl = new AbortController();
+    getSellRequest(resumeId, ctrl.signal).then((sr) => {
+      setDraftId(sr._id);
+      setType(typeByApi(sr.propertyType)?.id ?? 'apartment');
+      setF((base) => formFromDraft(sr, base));
+      if (sr.amenities?.length) setAmens(new Set(sr.amenities));
+      setPhotos((sr.photos ?? []).map((url) => ({ key: url, url, preview: url, uploading: false })));
+      if (typeof sr.address?.latitude === 'number' && typeof sr.address?.longitude === 'number') setCoords({ latitude: sr.address.latitude, longitude: sr.address.longitude });
+      setStep(Math.min(5, Math.max(0, (sr.draftStep ?? 1) - 1)));
+      setPicking(false);
+      setResume({ loading: false, error: null });
+    }).catch((e: unknown) => {
+      if (ctrl.signal.aborted) return;
+      setResume({ loading: false, error: errorMessage(e, 'Could not load this draft.') });
+    });
+    return () => ctrl.abort();
+  }, [resumeId, resumeTry]);
 
   const set = (k: keyof Form) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF((o) => ({ ...o, [k]: e.target.value }));
   const toggleA = (a: string) => setAmens((s) => { const x = new Set(s); if (x.has(a)) x.delete(a); else x.add(a); return x; });
@@ -235,10 +278,13 @@ export function SellWizard() {
     );
   };
 
+  if (resume.loading) return <PageLoading label="Loading your draft" />;
+  if (resume.error) return <PageError message={resume.error} onRetry={() => { setResume({ loading: true, error: null }); setResumeTry((t) => t + 1); }} />;
+
   if (done) return (
     <PageWrap className="!max-w-[560px]">
       <Card className="p-8 text-center mt-6">
-        <div className="w-24 h-24 rounded-full bg-emerald-50 grid place-items-center mx-auto ring-8 ring-emerald-50/60"><Icon name="party-popper" size={40} color="#059669" /></div>
+        <div className="w-24 h-24 rounded-full bg-emerald-50 grid place-items-center mx-auto ring-8 ring-emerald-50/60"><Icon name="circle-check" size={40} color="#059669" /></div>
         <h1 className="text-[24px] font-extrabold tracking-tight text-ink-900 mt-6 leading-tight">Your property has been<br />submitted</h1>
         <p className="text-[14px] text-ink-500 mt-2.5 max-w-sm mx-auto">Builtglory team will review within 48 hours. You&apos;ll receive updates on your progress.</p>
         <div className="rounded-2xl border border-ink-200 p-5 mt-7 text-left">
@@ -252,7 +298,7 @@ export function SellWizard() {
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 mt-6"><Button variant="outline" onClick={() => router.push('/')}>Home</Button><Button icon="tag" onClick={() => router.push('/listings')}>My Listings</Button></div>
+        <div className="grid grid-cols-2 gap-3 mt-6"><Button variant="outline" onClick={() => router.push('/')}>Home</Button><Button icon="tag" onClick={() => router.push('/listings?tab=Upcoming')}>My Listings</Button></div>
       </Card>
     </PageWrap>
   );
@@ -489,7 +535,7 @@ export function SellWizard() {
           <FormError message={formError} />
           <div className="flex items-center gap-3 pt-5 mt-5 border-t border-ink-100">
             <Button variant="outline" icon="arrow-left" disabled={busy} onClick={() => (step === 0 ? setPicking(true) : setStep(step - 1))}>Back</Button>
-            {step < 2 && <button type="button" disabled={busy || !f.title.trim()} onClick={() => void run(async () => { await saveDraft(); toast('Saved as draft', 'save'); })} className="text-[13px] font-semibold text-ink-500 hover:text-brand-600 disabled:opacity-50">Save as Draft</button>}
+            <button type="button" disabled={busy} onClick={() => void run(async () => { await saveDraft(); toast('Saved as draft', 'save'); router.push('/listings?tab=Drafts'); })} className="flex items-center gap-1.5 text-[13px] font-semibold text-ink-500 hover:text-brand-600 disabled:opacity-50"><Icon name="save" size={15} />Save as Draft</button>
             <div className="flex-1"></div>
             <Button iconRight={step === 5 ? 'check' : 'arrow-right'} loading={busy} disabled={!canNext} onClick={next}>
               {['Continue to Address', 'Continue to Details', 'Continue to Amenities', 'Continue to Photos', `Continue (${uploaded.length}/${MIN_PHOTOS} photos)`, 'Submit Listing'][step]}

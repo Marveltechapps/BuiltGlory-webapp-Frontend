@@ -52,6 +52,7 @@ export interface User {
   bankDetails?: BankDetails;
   kycStatus?: 'not_submitted' | 'pending' | 'verified' | 'rejected';
   notificationPreferences?: NotificationPreferences;
+  preferences?: { language?: string };
   accountDeletion?: AccountDeletionStatus;
   totalEnquiries?: number;
   totalVisits?: number;

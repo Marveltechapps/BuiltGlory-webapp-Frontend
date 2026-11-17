@@ -173,11 +173,11 @@ The chosen pill is also prefixed to the message: `"[Site visit] <description>"`.
 
 **GPS → city:** nearest of Chennai, Bengaluru, Hyderabad, Mumbai, Pune, Delhi NCR (by squared lat/lng distance).
 
-### 3.4 Enquiry pipeline (10 steps, `src/lib/pipelines.ts`)
+### 3.4 Enquiry pipeline (8 steps, `src/lib/pipelines.ts`)
 
 Step numbers in §3.4 and §3.5 are 1-based (the code in `pipelines.ts` uses 0-based indexes).
 
-Steps: Enquiry Submitted · Verification Call · Visit Scheduled · Deal Confirmed · Documents Shared · KYC Verified · Token Payment · Payment Method · Registration · Completed.
+Steps: Enquiry Submitted · Verification Call · Visit Scheduled · Deal Confirmed · KYC Verified · Token Payment · Registration · Completed.
 
 **Group:**
 
@@ -191,15 +191,30 @@ Steps: Enquiry Submitted · Verification Call · Visit Scheduled · Deal Confirm
 
 | Condition | Current step |
 | --- | --- |
-| group completed | all 10 done |
-| `deal.stage = documentation` | 9 Registration |
-| `deal.stage ∈ full_payment, stage_payment, interior_design` | 8 Payment Method |
-| `deal.stage = token_payment` | 7 Token Payment if `user.kycStatus = verified`, else 6 KYC Verified |
+| group completed | 8 Completed (all done) |
+| `deal.stage = documentation` | 7 Registration |
+| `deal.financials.tokenPaid`, or `deal.stage ∈ full_payment, stage_payment, interior_design` | 6 Token Payment |
+| `deal.stage = token_payment` | 5 KYC Verified if `user.kycStatus = verified`, else 4 Deal Confirmed |
 | `deal.stage ∈ negotiation, re_engagement` or `status = negotiating` | 4 Deal Confirmed |
-| any non-cancelled visit, or `status ∈ visit_scheduled, responded`, or `deal.stage ∈ active_leads, site_visits` | 3 Visit Scheduled |
-| otherwise | 2 Verification Call |
+| any non-cancelled visit, or `status = visit_scheduled`, or `deal.stage = site_visits` | 3 Visit Scheduled |
+| `status = responded` or `deal.stage = active_leads` | 2 Verification Call |
+| otherwise | 1 Enquiry Submitted |
 
-Step notes: step 1 shows `submittedAt`; step 2 shows "Advisor confirmed your interest" once `status ≠ new`; step 3 shows the next upcoming visit date/time.
+Step notes: step 1 shows `submittedAt`; step 3 the next visit date/time; step 4 the agreed price; step 6 the paid token amount; step 7 the registration appointment from `deal.documentation.workflow.registration` (`date`, `office`, `sub`).
+
+**Buyer action on the current step** (opens from the step, the "Current step" card, or `?act=1`). Backend state still drives progress; each action only sends a request:
+
+| Step | Action | Call |
+| --- | --- | --- |
+| 1 | Request Callback | `POST /callbacks` (`source: property_detail`, `bestTimePreference`) |
+| 2 | Schedule Visit | `GET /visits/availability` (next 5 open days) → `POST /visits` |
+| 3 | Confirm Deal | `POST /callbacks` (`category: pricing`) to the advisor |
+| 4 | Complete KYC | Aadhaar/PAN format checked in the browser; files → `POST /documents` (`ownerType: user`, `purpose: kyc`). The numbers are not sent — the API has no field for them |
+| 5 | Pay Token Amount | `POST /payments/token` (`upi` or `bank`); amount = `deal.financials.tokenAmount` or app-config `payment.tokenAmount`; UPI QR encodes `upi://pay` with app-config `payment.escrow.upiId`. Card is shown but not available (no card method in the API) |
+| 6 | View Appointment | read-only appointment + client-side document checklist |
+| 7 | Mark as Registered | `POST /callbacks` (`category: general`) to the advisor |
+
+The enquiry form sends the design's Interest / Budget / Planning-to-buy picks as `enquiryTypes` tags (Home Loan maps to `interestType: more_details`).
 
 **List badge and note:**
 
@@ -361,7 +376,7 @@ Card line 2: "Site visit" or "Video call" + property location.
 | --- | --- |
 | Saved | `GET /me/favorites`; un-saving a card removes it immediately. Empty → Browse button. |
 | My Enquiries | Tabs All / Active / Completed / Cancelled (§3.4). Card → Enquiry status. |
-| Enquiry status | Progress bar, 10-step timeline in two columns, "Current step" and "Up next" cards, View Property, View My Visits, Call / Chat. "Cancel Enquiry" only when active and no deal → dialog → `PATCH …/cancel` → back to list. |
+| Enquiry status | Progress bar, 8-step timeline in two columns, "Current step" and "Up next" cards, View Property, View My Visits, Call / Chat. "Cancel Enquiry" only when active and no deal → dialog → `PATCH …/cancel` → back to list. |
 | My Visits | §3.7. Upcoming: Reschedule (scheduler in reschedule mode, same visit type) / Cancel (dialog → `PATCH /visits/:id/cancel`, then reload). Others: View Property / Visit Again (or Rebook Visit). |
 | My Deals | §3.6. |
 

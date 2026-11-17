@@ -75,8 +75,8 @@ const ROLE_MAP: Record<string, { role: CustomerRole; userType: UserType }> = {
 };
 
 type Mode = 'login' | 'signup' | 'forgot';
-type Step = 'form' | 'otp' | 'success';
-interface Form { id: string; password: string; name: string; phone: string; email: string; role: string; agree: boolean }
+type Step = 'form' | 'otp' | 'reset' | 'success';
+interface Form { id: string; password: string; name: string; phone: string; email: string; role: string; agree: boolean; newPw: string; confirm: string }
 
 export function AuthScreen({ gated = false, initialMode = 'login', next = '/' }: { gated?: boolean; initialMode?: 'login' | 'signup'; next?: string }) {
   const router = useRouter();
@@ -88,8 +88,8 @@ export function AuthScreen({ gated = false, initialMode = 'login', next = '/' }:
   const [legalDoc, setLegalDoc] = useState<LegalDocName | null>(null);
   const [mode, setMode] = useState<Mode>(initialMode);
   const [step, setStep] = useState<Step>('form');
-  const [method, setMethod] = useState<'password' | 'otp'>('otp');
-  const [f, setF] = useState<Form>({ id: '', password: '', name: '', phone: '', email: '', role: 'Buyer', agree: false });
+  const [method, setMethod] = useState<'password' | 'otp'>('password');
+  const [f, setF] = useState<Form>({ id: '', password: '', name: '', phone: '', email: '', role: 'Buyer', agree: false, newPw: '', confirm: '' });
   const [show, setShow] = useState(false);
   const [err, setErr] = useState<Partial<Record<keyof Form, string>>>({});
   const [loading, setLoading] = useState(false);
@@ -180,8 +180,7 @@ export function AuthScreen({ gated = false, initialMode = 'login', next = '/' }:
 
   const submitForgot = () => {
     const e: Partial<Record<keyof Form, string>> = {};
-    if (digits(f.id).length !== 10) e.id = 'Enter your registered 10-digit mobile number';
-    if (pwScore(f.password) < 2) e.password = 'Use 8+ characters with a number or capital letter';
+    if (digits(f.id).length !== 10) e.id = 'Enter your registered mobile number';
     if (!check(e)) return;
     void (async () => {
       setLoading(true);
@@ -201,17 +200,35 @@ export function AuthScreen({ gated = false, initialMode = 'login', next = '/' }:
     })();
   };
 
+  /** Forgot password: the code is checked by the reset call itself, together with the new password. */
+  const submitReset = () => {
+    const e: Partial<Record<keyof Form, string>> = {};
+    if (pwScore(f.newPw) < 2) e.newPw = 'Use 8+ characters with a number or capital letter';
+    if (f.confirm !== f.newPw) e.confirm = 'Passwords do not match';
+    if (!check(e)) return;
+    void (async () => {
+      setLoading(true);
+      try {
+        await resetPassword(otpTarget, otp.join(''), f.newPw, requestId);
+        toast('Password updated — please sign in');
+        setF((o) => ({ ...o, password: '', newPw: '', confirm: '' }));
+        switchMode('login');
+        setMethod('password');
+      } catch (err) {
+        check({ newPw: errorMessage(err, 'Could not reset your password. Check the code and try again.') });
+      } finally {
+        setLoading(false);
+      }
+    })();
+  };
+
+  const social = (name: string) => toast(`${name} sign-in isn't available yet — continue with your mobile number`, 'info');
+
   const verify = async () => {
+    if (mode === 'forgot') { setOtpError(null); setStep('reset'); return; }
     setLoading(true);
     setOtpError(null);
     try {
-      if (mode === 'forgot') {
-        await resetPassword(otpTarget, otp.join(''), f.password, requestId);
-        toast('Password updated. Sign in with your new password.');
-        switchMode('login');
-        setMethod('password');
-        return;
-      }
       const s = await verifyCustomerOtp(otpTarget, otp.join(''), requestId);
       setTokens(s.accessToken, s.refreshToken);
       if (mode === 'signup') {
@@ -267,21 +284,32 @@ export function AuthScreen({ gated = false, initialMode = 'login', next = '/' }:
       <div className="mt-4 p-3 rounded-xl bg-ink-50 flex items-center justify-center gap-2 text-[12px] text-ink-500"><Icon name="info" size={14} color="#1A6FFF" />The code is valid for {Math.max(1, Math.round(expires / 60))} minutes</div>
     </>
   );
+  else if (step === 'reset') body = (
+    <>
+      <div className="w-14 h-14 rounded-2xl bg-brand-50 grid place-items-center mb-5"><Icon name="key-round" size={26} color="#1A6FFF" /></div>
+      <h1 className="text-[28px] font-extrabold tracking-tight text-ink-900">Set a new password</h1>
+      <p className="text-[14px] text-ink-500 mt-1.5 mb-7">Choose a strong password you haven&apos;t used before.</p>
+      <div className="space-y-4">
+        <div><AuthField label="New password" icon="lock" type={show ? 'text' : 'password'} value={f.newPw} onChange={set('newPw')} placeholder="At least 8 characters" error={err.newPw} suffix={eye} /><PwStrength pw={f.newPw} /></div>
+        <AuthField label="Confirm password" icon="lock-keyhole" type={show ? 'text' : 'password'} value={f.confirm} onChange={set('confirm')} onKeyDown={(e) => e.key === 'Enter' && submitReset()} placeholder="Re-enter password" error={err.confirm} />
+      </div>
+      <div className="mt-6"><PrimaryBtn loading={loading} onClick={submitReset}>Update password</PrimaryBtn></div>
+    </>
+  );
   else if (mode === 'forgot') body = (
     <>
       <button type="button" onClick={() => switchMode('login')} className="flex items-center gap-1.5 text-[13px] font-semibold text-ink-500 hover:text-brand-600 mb-6 transition"><Icon name="arrow-left" size={15} />Back to login</button>
       <div className="w-14 h-14 rounded-2xl bg-brand-50 grid place-items-center mb-5"><Icon name="lock-keyhole-open" size={26} color="#1A6FFF" /></div>
       <h1 className="text-[28px] font-extrabold tracking-tight text-ink-900">Forgot password?</h1>
-      <p className="text-[14px] text-ink-500 mt-1.5 mb-7">Enter your registered mobile number and a new password. We&apos;ll send a code to confirm the reset.</p>
-      <AuthField label="Mobile number" icon="phone" prefix="+91" inputMode="numeric" value={f.id} onChange={set('id')} placeholder="98840 12345" error={err.id} />
-      <div className="mt-4"><AuthField label="New password" icon="lock" type={show ? 'text' : 'password'} value={f.password} onChange={set('password')} placeholder="At least 8 characters" error={err.password} suffix={eye} /><PwStrength pw={f.password} /></div>
+      <p className="text-[14px] text-ink-500 mt-1.5 mb-7">Enter your registered mobile number and we&apos;ll send you a code to reset it.</p>
+      <AuthField label="Mobile number" icon="phone" prefix="+91" inputMode="numeric" value={f.id} onChange={set('id')} onKeyDown={(e) => e.key === 'Enter' && submitForgot()} placeholder="98840 12345" error={err.id} />
       <div className="mt-6"><PrimaryBtn loading={loading} onClick={submitForgot}>Send reset code</PrimaryBtn></div>
     </>
   );
   else body = (
     <>
       <h1 className="text-[30px] font-extrabold tracking-tight text-ink-900">{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
-      <p className="text-[14px] text-ink-500 mt-1.5">{mode === 'login' ? 'Sign in to manage enquiries, visits and listings.' : 'Join thousands buying and selling verified homes.'}</p>
+      <p className="text-[14px] text-ink-500 mt-1.5">{mode === 'login' ? 'Log in to buy, sell and track your property journey.' : 'Buy or sell verified homes with zero brokerage.'}</p>
       <div className="relative grid grid-cols-2 p-1 rounded-2xl bg-ink-100 mt-6 mb-6">
         <span className="absolute top-1 bottom-1 rounded-xl bg-white shadow-sm transition-all duration-300" style={{ left: mode === 'login' ? 4 : 'calc(50% + 0px)', width: 'calc(50% - 4px)', transitionTimingFunction: 'cubic-bezier(.2,.8,.25,1)' }}></span>
         {([['login', 'Log in'], ['signup', 'Sign up']] as const).map(([m, l]) => <button type="button" key={m} onClick={() => switchMode(m)} className={cx('relative h-10 text-[14px] font-bold transition-colors', mode === m ? 'text-ink-900' : 'text-ink-500 hover:text-ink-700')}>{l}</button>)}
@@ -309,14 +337,6 @@ export function AuthScreen({ gated = false, initialMode = 'login', next = '/' }:
           </div>
           <div><AuthField label="Password" icon="lock" type={show ? 'text' : 'password'} value={f.password} onChange={set('password')} placeholder="At least 8 characters" error={err.password} suffix={eye} /><PwStrength pw={f.password} /></div>
           <div>
-            <div className="text-[13px] font-semibold text-ink-800 mb-2">I&apos;m here to</div>
-            <div className="grid grid-cols-3 gap-2">{([['Buyer', 'home', 'Buy'], ['Seller', 'tag', 'Sell'], ['NRI', 'globe', 'Buy from abroad']] as const).map(([r, ic, l]) => (
-              <button type="button" key={r} onClick={() => setF((o) => ({ ...o, role: r }))} className={cx('rounded-xl border p-2.5 flex flex-col items-center gap-1 transition-all duration-200', f.role === r ? 'border-brand-500 bg-brand-50 ring-4 ring-brand-100' : 'border-ink-200 hover:border-ink-300')}>
-                <Icon name={ic} size={17} color={f.role === r ? '#1A6FFF' : '#64748B'} /><span className={cx('text-[12px] font-bold', f.role === r ? 'text-brand-700' : 'text-ink-700')}>{l}</span>
-              </button>))}
-            </div>
-          </div>
-          <div>
             <label className="flex items-start gap-2.5 cursor-pointer select-none">
               <input type="checkbox" checked={f.agree} onChange={set('agree')} className="mt-0.5 w-4 h-4 accent-[#1A6FFF]" />
               <span className="text-[13px] text-ink-600">I agree to the <button type="button" onClick={(e) => { e.preventDefault(); setLegalDoc('Terms of Service'); }} className="text-brand-600 font-semibold hover:underline">Terms of Service</button> and <button type="button" onClick={(e) => { e.preventDefault(); setLegalDoc('Privacy Policy'); }} className="text-brand-600 font-semibold hover:underline">Privacy Policy</button></span>
@@ -326,6 +346,12 @@ export function AuthScreen({ gated = false, initialMode = 'login', next = '/' }:
           <div className="pt-1"><PrimaryBtn loading={loading} onClick={submitSignup}>Create account<Icon name="arrow-right" size={17} color="#fff" /></PrimaryBtn></div>
         </div>
       )}
+      <div className="flex items-center gap-3 my-5"><div className="flex-1 h-px bg-ink-200"></div><span className="text-[12px] font-medium text-ink-400">or continue with</span><div className="flex-1 h-px bg-ink-200"></div></div>
+      <div className="grid grid-cols-2 gap-3">
+        {([['chrome', 'Google'], ['apple', 'Apple']] as const).map(([ic, n]) => (
+          <button type="button" key={n} onClick={() => social(n)} className="h-11 rounded-xl border border-ink-200 bg-white text-[14px] font-semibold text-ink-800 flex items-center justify-center gap-2 hover:border-ink-300 hover:bg-ink-50 hover:-translate-y-0.5 transition-all duration-200"><Icon name={ic} size={17} />{n}</button>
+        ))}
+      </div>
       <p className="text-center text-[13.5px] text-ink-500 mt-6">{mode === 'login' ? 'New to Builtglory? ' : 'Already have an account? '}<button type="button" onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')} className="font-bold text-brand-600 hover:underline">{mode === 'login' ? 'Create an account' : 'Log in'}</button></p>
       {gated && <button type="button" onClick={enterGuest} className="group w-full mt-4 h-11 rounded-xl bg-ink-50 hover:bg-ink-100 text-[13.5px] font-semibold text-ink-600 hover:text-ink-900 transition flex items-center justify-center gap-2"><Icon name="user-round" size={16} />Continue as Guest<Icon name="arrow-right" size={15} className="transition-transform group-hover:translate-x-0.5" /></button>}
     </>
