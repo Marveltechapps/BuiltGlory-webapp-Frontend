@@ -115,7 +115,7 @@ export function EnquiryForm({ propertyId }: { propertyId: string }) {
 
   return (
     <PageWrap className="!max-w-[1120px] web-split">
-      <button type="button" onClick={back} className="flex items-center gap-2 text-[13.5px] font-semibold text-ink-500 hover:text-brand-600 mb-4"><Icon name="arrow-left" size={16} />Submit Enquiry</button>
+      <button type="button" onClick={back} aria-label="Back" className="flex items-center gap-2 text-[13.5px] font-semibold text-ink-500 hover:text-brand-600 mb-4"><Icon name="arrow-left" size={16} />Back</button>
       <Card className="p-6">
         <div className="flex items-center gap-3 rounded-2xl bg-brand-50 border border-brand-100 p-3">
           <PhotoPlaceholder tag={p._id} src={propertyPhotos(p)[0]} className="rounded-xl shrink-0" style={{ width: 56, height: 56 }} />

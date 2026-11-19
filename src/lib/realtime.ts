@@ -19,7 +19,7 @@ function openChatSocket() {
 /** Live support replies on the /chat socket. The 10s poll stays as a fallback. */
 export function useSupportRealtime(ticketId: string | undefined, onTicket: (ticket: SupportTicket) => void) {
   const cb = useRef(onTicket);
-  cb.current = onTicket;
+  useEffect(() => { cb.current = onTicket; });
   useEffect(() => {
     if (!ticketId) return undefined;
     const socket: Socket | null = openChatSocket();
@@ -38,7 +38,7 @@ export function useSupportRealtime(ticketId: string | undefined, onTicket: (tick
 /** Refetch open lists when the API publishes `records:changed` for this customer. */
 export function useRecordRefresh(reload: () => void) {
   const ref = useRef(reload);
-  ref.current = reload;
+  useEffect(() => { ref.current = reload; });
   useEffect(() => {
     const socket: Socket | null = openChatSocket();
     if (!socket) return undefined;
@@ -54,7 +54,7 @@ export function useRecordRefresh(reload: () => void) {
 /** Live offer, payout and registration updates for one listing. */
 export function useSellerRealtime(sellRequestId: string | undefined, onActivity: (activity: SellerActivity) => void) {
   const cb = useRef(onActivity);
-  cb.current = onActivity;
+  useEffect(() => { cb.current = onActivity; });
   useEffect(() => {
     if (!sellRequestId) return undefined;
     const socket: Socket | null = openChatSocket();

@@ -46,7 +46,7 @@ export function useApiQuery<T>(loader: (signal: AbortSignal) => Promise<T>, deps
 /** Refetch when the tab becomes visible again. */
 export function useRefreshOnFocus(reload: () => void) {
   const ref = useRef(reload);
-  ref.current = reload;
+  useEffect(() => { ref.current = reload; });
   useEffect(() => {
     const run = () => { if (document.visibilityState === 'visible') ref.current(); };
     window.addEventListener('focus', run);
@@ -61,50 +61,69 @@ export function useRefreshOnFocus(reload: () => void) {
 /** First page, then "load more" until `meta.totalPages` is exhausted. */
 export function usePagedQuery<T>(loader: (page: number, signal: AbortSignal) => Promise<{ items: T[]; meta?: ApiMeta }>, deps: unknown[]) {
   const [tick, setTick] = useState(0);
-  const [items, setItems] = useState<T[]>([]);
-  const [meta, setMeta] = useState<ApiMeta | undefined>();
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [pageState, setPageState] = useState<{ base: string; tick: number; items: T[]; meta?: ApiMeta; error: string | null } | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const base = JSON.stringify(deps);
   const loaderRef = useRef(loader);
-  loaderRef.current = loader;
+  useEffect(() => { loaderRef.current = loader; });
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
   useRefreshOnFocus(reload);
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
+    const requestBase = base;
+    const requestTick = tick;
     loaderRef.current(1, controller.signal)
       .then((res) => {
         if (controller.signal.aborted) return;
-        setItems(res.items);
-        setMeta(res.meta);
-        setError(null);
+        setPageState({ base: requestBase, tick: requestTick, items: res.items, meta: res.meta, error: null });
       })
       .catch((e: unknown) => {
-        if (!controller.signal.aborted) setError(errorMessage(e, 'Could not load this page. Please try again.'));
-      })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+        if (!controller.signal.aborted) {
+          setPageState((prev) => ({
+            base: requestBase,
+            tick: requestTick,
+            items: prev?.base === requestBase ? prev.items : [],
+            meta: prev?.base === requestBase ? prev.meta : undefined,
+            error: errorMessage(e, 'Could not load this page. Please try again.'),
+          }));
+        }
+      });
     return () => controller.abort();
   }, [base, tick]);
 
-  const loadMore = useCallback(() => {
-    const current = meta?.page ?? 1;
-    const totalPages = meta?.totalPages ?? 1;
-    if (loadingMore || current >= totalPages) return;
-    const controller = new AbortController();
-    setLoadingMore(true);
-    loaderRef.current(current + 1, controller.signal)
-      .then((res) => {
-        setItems((prev) => [...prev, ...res.items]);
-        setMeta(res.meta);
-      })
-      .catch((e: unknown) => setError(errorMessage(e, 'Could not load more.')))
-      .finally(() => setLoadingMore(false));
-  }, [loadingMore, meta?.page, meta?.totalPages]);
+  const settled = pageState?.base === base && pageState.tick === tick ? pageState : null;
+  const visible = pageState?.base === base ? pageState : null;
 
-  const hasMore = (meta?.page ?? 1) < (meta?.totalPages ?? 1);
-  return { items, meta, loading, loadingMore, error, reload, loadMore, hasMore };
+  const loadMore = useCallback(() => {
+    const current = settled?.meta?.page ?? 1;
+    const totalPages = settled?.meta?.totalPages ?? 1;
+    if (loadingMore || !settled || current >= totalPages) return;
+    setLoadingMore(true);
+    loaderRef.current(current + 1, new AbortController().signal)
+      .then((res) => {
+        setPageState((prev) => prev && prev.base === base && prev.tick === tick
+          ? { ...prev, items: [...prev.items, ...res.items], meta: res.meta, error: null }
+          : prev);
+      })
+      .catch((e: unknown) => {
+        setPageState((prev) => prev && prev.base === base && prev.tick === tick
+          ? { ...prev, error: errorMessage(e, 'Could not load more.') }
+          : prev);
+      })
+      .finally(() => setLoadingMore(false));
+  }, [base, loadingMore, settled, tick]);
+
+  const hasMore = (visible?.meta?.page ?? 1) < (visible?.meta?.totalPages ?? 1);
+  return {
+    items: visible?.items ?? [],
+    meta: visible?.meta,
+    loading: !settled,
+    loadingMore,
+    error: settled?.error ?? null,
+    reload,
+    loadMore,
+    hasMore,
+  };
 }

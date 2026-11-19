@@ -47,6 +47,8 @@ const refreshSession = () => {
 const send = (path: string, init: RequestInit | undefined, token: string | null) => {
   const headers = new Headers(init?.headers);
   headers.set('x-device-id', getDeviceId());
+  // QA-BUG-012: trusted client identifier for enquiry source (server must not trust body.source).
+  if (!headers.has('X-Client')) headers.set('X-Client', 'web');
   if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
   return fetch(url(path), { ...init, headers });
 };

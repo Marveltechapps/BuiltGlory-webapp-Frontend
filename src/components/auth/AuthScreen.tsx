@@ -83,7 +83,8 @@ export function AuthScreen({ gated = false, initialMode = 'login', next = '/' }:
   const back = useBack(next || '/');
   const { completeSignIn, enterGuest } = useSession();
   const { toast, toastError } = useToast();
-  const contact = supportContact(useAppConfig());
+  const config = useAppConfig();
+  const contact = supportContact(config);
   const total = useListingTotal();
   const [legalDoc, setLegalDoc] = useState<LegalDocName | null>(null);
   const [mode, setMode] = useState<Mode>(initialMode);
@@ -379,7 +380,7 @@ export function AuthScreen({ gated = false, initialMode = 'login', next = '/' }:
           <div className="flex gap-1.5 mt-4">{AUTH_FEATURES.map((_, i) => <button type="button" aria-label={`Feature ${i + 1}`} key={i} onClick={() => setFeat(i)} className={cx('h-1.5 rounded-full transition-all duration-300', i === feat ? 'w-8 bg-white' : 'w-1.5 bg-white/40')}></button>)}</div>
         </div>
         <div className="relative grid grid-cols-3 gap-4 max-w-md">
-          {[[total.data !== null ? total.data.toLocaleString('en-IN') : '—', 'Verified listings'], ['0%', 'Brokerage'], ['4.8★', 'App rating']].map(([v, l]) => <div key={l}><div className="text-[22px] font-extrabold">{v}</div><div className="text-[12px] text-white/60">{l}</div></div>)}
+          {[[total.data !== null ? total.data.toLocaleString('en-IN') : '—', 'Verified listings'], ['0%', 'Brokerage'], [config?.stats?.appRating != null ? `${config.stats.appRating}★` : '—', 'App rating']].map(([v, l]) => <div key={l}><div className="text-[22px] font-extrabold">{v}</div><div className="text-[12px] text-white/60">{l}</div></div>)}
         </div>
       </aside>
       <main className="flex flex-col min-h-full">

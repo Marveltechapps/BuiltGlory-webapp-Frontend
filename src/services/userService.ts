@@ -11,6 +11,11 @@ export function updateMe(payload: UpdateMePayload) {
   return apiSend<User>('PATCH', '/me', payload);
 }
 
+/** POST /me/kyc — attach uploaded KYC files and mark the profile pending review. */
+export function submitKyc(documents: Array<{ documentId: string; type: 'pan' | 'aadhaar' | 'passport' | 'oci_card' | 'visa' | 'address_proof' | 'other' }>) {
+  return apiSend<User>('POST', '/me/kyc', { documents });
+}
+
 /** GET /me/account-deletion */
 export function getAccountDeletion(signal?: AbortSignal) {
   return apiGet<AccountDeletionStatus>('/me/account-deletion', undefined, signal);

@@ -19,6 +19,7 @@ import { useAppConfig } from '../../context/AppConfigContext';
 import { cancelEnquiry } from '../../services/enquiryService';
 import { createVisit, getVisitAvailability } from '../../services/visitService';
 import { uploadDocument } from '../../services/documentService';
+import { submitKyc } from '../../services/userService';
 import { createTokenPayment, listMyPayments } from '../../services/paymentService';
 import { requestPropertyCallback } from '../../services/supportService';
 import { errorMessage } from '../../services/api';
@@ -53,7 +54,7 @@ function Rows({ rows, bold = true }: { rows: Array<[string, string]>; bold?: boo
 export function EnquiryStatus({ id, act }: { id: string; act?: boolean }) {
   const router = useRouter();
   const back = useBack('/enquiries');
-  const { user } = useSession();
+  const { user, setUser } = useSession();
   const config = useAppConfig();
   const { toast } = useToast();
   const { data: e, loading, error, reload } = useEnquiry(id, true);
@@ -191,7 +192,14 @@ export function EnquiryStatus({ id, act }: { id: string; act?: boolean }) {
           ok: ad.length === 12 && panOk && KYC_FILES.every(([k]) => !!files[k]),
           run: async () => {
             if (!user) throw new Error('Sign in again to upload your KYC documents.');
-            for (const [k, , type] of KYC_FILES) { const f = files[k]; if (f) await uploadDocument(f, 'user', user._id, 'kyc', type); }
+            const uploaded: Array<{ documentId: string; type: 'aadhaar' | 'pan' }> = [];
+            for (const [k, , type] of KYC_FILES) {
+              const f = files[k];
+              if (!f) continue;
+              const doc = await uploadDocument(f, 'user', user._id, 'kyc', type);
+              uploaded.push({ documentId: doc._id, type });
+            }
+            setUser(await submitKyc(uploaded));
             setKycSent(true);
             toast('KYC documents submitted for verification', 'shield-check');
           },
@@ -248,7 +256,7 @@ export function EnquiryStatus({ id, act }: { id: string; act?: boolean }) {
               </>}
               {pay === 'Card' && <div className="rounded-xl bg-ink-50 p-3 text-[12.5px] text-ink-600 flex items-start gap-2"><Icon name="info" size={14} color="#1A6FFF" className="mt-0.5 shrink-0" />Card payments aren&apos;t available yet. Please pay by UPI or net banking.</div>}
             </div>
-            <div className="flex items-center gap-2 text-[12px] text-ink-500 mt-4"><Icon name="lock" size={13} color="#94A3B8" />Secured with 256-bit encryption. Refundable if the seller cancels.</div>
+            <div className="flex items-center gap-2 text-[12px] text-ink-500 mt-4"><Icon name="lock" size={13} color="#94A3B8" />Transfer the token from your own UPI or bank, then submit the reference. BuiltGlory verifies it before the property is reserved. Card payments are not available.</div>
           </>),
         };
       }

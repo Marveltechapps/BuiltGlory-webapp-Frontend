@@ -44,7 +44,7 @@ export function About() {
         <div className="text-[13px] text-ink-400">{version ? `Version ${version}` : ' '}</div>
         <p className="text-[14px] text-ink-600 leading-relaxed mt-4 max-w-md mx-auto">{about?.body || about?.excerpt || (content.loading ? 'Loading…' : 'Builtglory is a zero-brokerage real estate platform where every listing is legally verified before it reaches you.')}</p>
         <div className="grid grid-cols-3 gap-3 mt-6">
-          {[[total.data !== null ? total.data.toLocaleString('en-IN') : '—', 'Listings'], ['18', 'Cities'], ['4.8★', 'App rating']].map(([v, l]) => <div key={l} className="rounded-xl bg-ink-50 p-3"><div className="text-[18px] font-extrabold text-ink-900">{v}</div><div className="text-[11px] text-ink-400">{l}</div></div>)}
+          {[[total.data !== null ? total.data.toLocaleString('en-IN') : '—', 'Listings'], [config?.stats?.cities != null ? String(config.stats.cities) : '—', 'Cities'], [config?.stats?.appRating != null ? `${config.stats.appRating}★` : '—', 'App rating']].map(([v, l]) => <div key={l} className="rounded-xl bg-ink-50 p-3"><div className="text-[18px] font-extrabold text-ink-900">{v}</div><div className="text-[11px] text-ink-400">{l}</div></div>)}
         </div>
       </Card>
       <Card className="divide-y divide-ink-100 mt-4">

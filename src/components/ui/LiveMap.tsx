@@ -58,11 +58,13 @@ export function LiveMap({ pins = [], center = null, height = 220, className, pic
   const pickableRef = useRef(pickable);
   const onPickRef = useRef(onPick);
   const onPinClickRef = useRef(onPinClick);
-  pinsRef.current = pins;
-  centerRef.current = center;
-  pickableRef.current = pickable;
-  onPickRef.current = onPick;
-  onPinClickRef.current = onPinClick;
+  useEffect(() => {
+    pinsRef.current = pins;
+    centerRef.current = center;
+    pickableRef.current = pickable;
+    onPickRef.current = onPick;
+    onPinClickRef.current = onPinClick;
+  });
 
   const pinsKey = pins.map((p) => `${p.id}:${p.latitude}:${p.longitude}:${p.label ?? ''}`).join('|');
   const centerKey = center ? `${center.latitude},${center.longitude}` : '';

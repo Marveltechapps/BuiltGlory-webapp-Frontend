@@ -1,0 +1,17 @@
+# Manual gate only. This workflow does not build a release and does not call AWS.
+name: Deploy gate
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Environment name
+        type: choice
+        options: [staging, production]
+        required: true
+jobs:
+  hold:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target }}
+    steps:
+      - name: Stop before any release
+        run: echo "Deploy to ${{ inputs.target }} is not implemented. Require a reviewer on the GitHub Environment before any hosting change."

@@ -42,6 +42,7 @@ export function BrowseView({ initialType, initialSearch }: { initialType?: strin
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [sort, setSort] = useState<Sort>('relevance');
   const [view, setView] = useState<'grid' | 'map'>('grid');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [picked, setPicked] = useState(Boolean((initialType && typeById(initialType)) || initialSearch));
   const search = initialSearch?.trim() || '';
 
@@ -98,28 +99,31 @@ export function BrowseView({ initialType, initialSearch }: { initialType?: strin
   return (
     <PageWrap className="!max-w-[1320px]">
       <button type="button" onClick={() => setPicked(false)} className="flex items-center gap-2 text-[13px] font-semibold text-ink-500 hover:text-brand-600 mb-4"><Icon name="arrow-left" size={15} />Change property type</button>
-      <div className="flex items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-[24px] font-extrabold tracking-tight text-ink-900">Properties for sale</h1>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+        <div className="min-w-0">
+          <h1 className="text-[22px] sm:text-[24px] font-extrabold tracking-tight text-ink-900">Properties for sale</h1>
           <p className="text-[13.5px] text-ink-500 mt-1"><b className="text-ink-800">{query.loading && !query.data ? '…' : count}</b> homes{cities.length === 1 ? ` in ${cities[0]}` : ''}{types.size ? ` · ${[...types].map((t) => typeById(t)?.label).join(', ')}` : ''}{search ? ` · “${search}”` : ''}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="hidden sm:flex items-center bg-white border border-ink-200 rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 max-w-full">
+            <button type="button" onClick={() => setFiltersOpen((v) => !v)} className="lg:hidden flex items-center gap-2 h-10 px-3 bg-white border border-ink-200 rounded-xl text-[13.5px] font-semibold text-ink-700">
+              <Icon name="sliders-horizontal" size={15} color="#1A6FFF" />Filters{activeCount ? <span className="text-[11px] bg-brand-600 text-white rounded-full px-1.5 py-0.5">{activeCount}</span> : null}
+            </button>
+            <div className="hidden sm:flex items-center bg-white border border-ink-200 rounded-xl overflow-hidden">
             <button type="button" aria-label="Grid view" onClick={() => setView('grid')} className={cx('w-10 h-10 grid place-items-center', view === 'grid' ? 'bg-brand-600 text-white' : 'text-ink-500')}><Icon name="layout-grid" size={17} /></button>
             <button type="button" aria-label="Map view" onClick={() => setView('map')} className={cx('w-10 h-10 grid place-items-center', view === 'map' ? 'bg-brand-600 text-white' : 'text-ink-500')}><Icon name="map" size={17} /></button>
           </div>
           <div className="flex items-center gap-2 h-10 px-3 bg-white border border-ink-200 rounded-xl">
             <Icon name="arrow-up-down" size={15} color="#94A3B8" />
-            <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="bg-transparent outline-none text-[13.5px] font-medium text-ink-700">
+            <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="bg-transparent outline-none text-[13px] sm:text-[13.5px] font-medium text-ink-700 max-w-[9.5rem] sm:max-w-none">
               <option value="relevance">Relevance</option><option value="low">Price: Low to High</option><option value="high">Price: High to Low</option><option value="area">Largest area</option>
             </select>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-7 items-start">
+      <div className="flex flex-col lg:flex-row gap-7 items-start">
         {/* filter rail */}
-        <aside className="hidden lg:block w-[268px] shrink-0 sticky top-6">
+        <aside className={cx('w-full lg:w-[268px] shrink-0 lg:sticky lg:top-6', filtersOpen ? 'block' : 'hidden lg:block')}>
           <div className="bg-white rounded-2xl border border-ink-200 px-5">
             <div className="flex items-center justify-between pt-5 pb-1">
               <div className="flex items-center gap-2 text-[14px] font-bold text-ink-900"><Icon name="sliders-horizontal" size={16} color="#1A6FFF" />Filters{activeCount ? <span className="text-[11px] bg-brand-600 text-white rounded-full px-1.5 py-0.5">{activeCount}</span> : null}</div>
@@ -133,7 +137,7 @@ export function BrowseView({ initialType, initialSearch }: { initialType?: strin
               <div className="flex justify-between text-[11px] text-ink-400 mt-1"><span>₹10 L</span><span>₹3 Cr</span></div>
             </FilterGroup>
             <FilterGroup title="Bedrooms">
-              <div className="flex gap-2 flex-wrap">{['1', '2', '3', '4'].map((b) => <Pill key={b} active={bhks.has(b)} onClick={() => toggleSet(setBhks)(b)}>{b} BHK</Pill>)}</div>
+              <div className="flex gap-2 flex-wrap">{['1', '2', '3', '4', '5+'].map((b) => <Pill key={b} active={bhks.has(b)} onClick={() => toggleSet(setBhks)(b)}>{b === '5+' ? '5+ BHK' : `${b} BHK`}</Pill>)}</div>
             </FilterGroup>
             <FilterGroup title="Amenities">
               {['Lift', 'Gym', 'Pool', 'Parking', 'Security', 'Power Backup'].map((a) => <Check key={a} on={amens.has(a)} onClick={() => toggleSet(setAmens)(a)} label={a} />)}

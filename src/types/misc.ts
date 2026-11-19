@@ -90,6 +90,7 @@ export interface AppConfig {
   maintenance?: { enabled?: boolean; message?: string; expectedBackAt?: string | null };
   featureFlags?: Record<string, unknown>;
   payment?: { tokenAmount?: number; escrow?: EscrowAccount | null };
+  stats?: { cities?: number; appRating?: number };
   support?: {
     phone?: string;
     supportPhone?: string;
