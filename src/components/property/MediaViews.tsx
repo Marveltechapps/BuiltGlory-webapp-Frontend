@@ -12,8 +12,8 @@ import { PageError, PageLoading } from '../ui/StateViews';
 import { useProperty } from '../../hooks/useProperties';
 import { useBack } from '../../hooks/useNavigation';
 import { useToast } from '../../context/ToastContext';
-import { LiveMap } from '../ui/LiveMap';
-import { SPECS, cityCenter } from '../../lib/catalog';
+import { AddressMap } from '../ui/LiveMap';
+import { SPECS } from '../../lib/catalog';
 import { cx } from '../../lib/format';
 import { mapsUrl, propertyArea, propertyLocality } from '../../lib/property';
 import type { NearbyPlace } from '../../types/property';
@@ -176,12 +176,7 @@ export function LocationView({ id }: { id: string }) {
         )) : <Card className="p-4 text-[13.5px] text-ink-500">Nearby places and location advantages haven&apos;t been added for {propertyLocality(p) || 'this property'} yet.</Card>}
       </div>
       <div className="relative mt-4">
-        <LiveMap
-          height={240}
-          className="rounded-2xl border border-ink-200"
-          pins={typeof p.address?.latitude === 'number' && typeof p.address?.longitude === 'number' ? [{ id: p._id, latitude: p.address.latitude, longitude: p.address.longitude }] : []}
-          center={cityCenter(p.address?.city)}
-        />
+        <AddressMap address={p.address} pinId={p._id} height={240} className="rounded-2xl border border-ink-200" />
         <a href={mapsUrl(p)} target="_blank" rel="noopener noreferrer" className="absolute bottom-3 right-14 z-10 bg-white rounded-lg px-3 h-9 text-[12.5px] font-semibold text-ink-800 flex items-center gap-1.5 shadow-sm hover:bg-ink-50"><Icon name="map" size={14} color="#1A6FFF" />Open map</a>
       </div>
       <div className="grid grid-cols-2 gap-3 mt-4">

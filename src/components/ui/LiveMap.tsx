@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { LayerGroup, Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { cityCenter } from '../../lib/catalog';
 import { cx } from '../../lib/format';
+import { forwardGeocode } from '../../services/geoService';
 
 export interface LiveMapPin {
   id: string;
@@ -186,5 +187,41 @@ export function LiveMap({ pins = [], center = null, height = 220, className, pic
     <div className={cx('relative overflow-hidden bg-[#e8eef4]', className)} style={{ height }}>
       <div ref={host} className="live-map absolute inset-0" />
     </div>
+  );
+}
+
+export interface MapAddress {
+  line1?: string | null;
+  locality?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+/** Map for one listing. Uses saved coordinates, or looks the address up when they are missing. */
+export function AddressMap({ address, pinId = 'listing', label, height = 320, className }: { address?: MapAddress | null; pinId?: string; label?: string; height?: number; className?: string }) {
+  const latitude = typeof address?.latitude === 'number' ? address.latitude : null;
+  const longitude = typeof address?.longitude === 'number' ? address.longitude : null;
+  const [lookedUp, setLookedUp] = useState<{ latitude: number; longitude: number } | null>(null);
+  const query = [address?.line1, address?.locality, address?.city, address?.state, address?.pincode, 'India'].filter(Boolean).join(', ');
+  useEffect(() => {
+    if (latitude != null && longitude != null) return undefined;
+    if (query.length < 3) return undefined;
+    let cancelled = false;
+    void forwardGeocode(query).then((place) => {
+      if (!cancelled && place) setLookedUp({ latitude: place.latitude, longitude: place.longitude });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [latitude, longitude, query]);
+  const point = latitude != null && longitude != null ? { latitude, longitude } : lookedUp;
+  return (
+    <LiveMap
+      height={height}
+      className={className}
+      pins={point ? [{ id: pinId, latitude: point.latitude, longitude: point.longitude, label }] : []}
+      center={point || cityCenter(address?.city)}
+    />
   );
 }

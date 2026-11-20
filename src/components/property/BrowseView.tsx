@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '../ui/Icon';
 import { Pill } from '../ui/Tag';
@@ -10,7 +10,8 @@ import { PropCard } from '../ui/PropCard';
 import { Loading, ErrorState } from '../ui/StateViews';
 import { useApiQuery } from '../../hooks/useApiQuery';
 import { listProperties } from '../../services/propertyService';
-import { LiveMap } from '../ui/LiveMap';
+import { LiveMap, type LiveMapPin } from '../ui/LiveMap';
+import { forwardGeocode } from '../../services/geoService';
 import { PROPERTY_TYPES, cityCenter, typeById } from '../../lib/catalog';
 import { cx, formatINR } from '../../lib/format';
 import { propertyArea, propertyCity } from '../../lib/property';
@@ -44,6 +45,7 @@ export function BrowseView({ initialType, initialSearch }: { initialType?: strin
   const [view, setView] = useState<'grid' | 'map'>('grid');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [picked, setPicked] = useState(Boolean((initialType && typeById(initialType)) || initialSearch));
+  const [lookedUp, setLookedUp] = useState<Record<string, { latitude: number; longitude: number }>>({});
   const search = initialSearch?.trim() || '';
 
   const toggleSet = (setter: (fn: (s: Set<string>) => Set<string>) => void) => (v: string) => setter((s) => { const n = new Set(s); if (n.has(v)) n.delete(v); else n.add(v); return n; });
@@ -75,6 +77,23 @@ export function BrowseView({ initialType, initialSearch }: { initialType?: strin
   const clearAll = () => { setTypes(new Set()); setBhks(new Set()); setAmens(new Set()); setBudget(300); setVerifiedOnly(false); };
   const activeCount = types.size + bhks.size + amens.size + (verifiedOnly ? 1 : 0);
   const open = (p: Property) => router.push(`/properties/${p._id}`);
+  const missingKey = list.filter((p) => typeof p.address?.latitude !== 'number').map((p) => p._id).join(',');
+  useEffect(() => {
+    const missing = list.filter((p) => typeof p.address?.latitude !== 'number' && (p.address?.locality || p.address?.city || p.address?.line1));
+    if (!missing.length) return undefined;
+    let cancelled = false;
+    void (async () => {
+      for (const p of missing) {
+        if (cancelled) return;
+        const q = [p.address?.line1, p.address?.locality, p.address?.city, p.address?.state, p.address?.pincode, 'India'].filter(Boolean).join(', ');
+        try {
+          const place = await forwardGeocode(q);
+          if (!cancelled && place) setLookedUp((current) => ({ ...current, [p._id]: { latitude: place.latitude, longitude: place.longitude } }));
+        } catch { /* the next listing can still be placed */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [missingKey]);
 
   if (!picked) return (
     <PageWrap className="!max-w-[880px]">
@@ -91,9 +110,9 @@ export function BrowseView({ initialType, initialSearch }: { initialType?: strin
     </PageWrap>
   );
 
-  const pins = list.flatMap((p) => {
-    const latitude = p.address?.latitude;
-    const longitude = p.address?.longitude;
+  const pins: LiveMapPin[] = list.flatMap((p) => {
+    const latitude = typeof p.address?.latitude === 'number' ? p.address.latitude : lookedUp[p._id]?.latitude;
+    const longitude = typeof p.address?.longitude === 'number' ? p.address.longitude : lookedUp[p._id]?.longitude;
     return typeof latitude === 'number' && typeof longitude === 'number' ? [{ id: p._id, latitude, longitude, label: formatINR(p.price) }] : [];
   });
   return (

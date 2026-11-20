@@ -68,6 +68,24 @@ async function nominatim(latitude: number, longitude: number) {
   }
 }
 
+export interface ForwardGeocode {
+  latitude: number;
+  longitude: number;
+  city?: string;
+  state?: string;
+  locality?: string;
+  label?: string;
+}
+
+/** GET /geo/forward — turn a written address into a map point. */
+export async function forwardGeocode(query: string): Promise<ForwardGeocode | null> {
+  const q = query.trim();
+  if (q.length < 3) return null;
+  const place = await apiGet<ForwardGeocode>('/geo/forward', { q });
+  if (typeof place.latitude !== 'number' || typeof place.longitude !== 'number') return null;
+  return place;
+}
+
 /** GET /geo/reverse, enriched with street, area and pincode for the clicked map point. */
 export async function reverseGeocode(latitude: number, longitude: number): Promise<ReverseGeocode> {
   let mapped: ReverseGeocode | null = null;

@@ -122,7 +122,7 @@ export const TICKET_CATEGORY_LABEL: Record<SupportCategory, string> = {
 
 // Popular-city list from the onboarding design and their coordinates for nearest-city GPS matching.
 export const CITY_COORDS: Record<string, [number, number]> = {
-  Chennai: [13.08, 80.27], Bengaluru: [12.97, 77.59], Hyderabad: [17.38, 78.48], Mumbai: [19.07, 72.87], Pune: [18.52, 73.85], 'Delhi NCR': [28.61, 77.21],
+  Chennai: [13.08, 80.27], Bengaluru: [12.97, 77.59], Bangalore: [12.97, 77.59], Hyderabad: [17.38, 78.48], Mumbai: [19.07, 72.87], Pune: [18.52, 73.85], 'Delhi NCR': [28.61, 77.21], Delhi: [28.61, 77.21],
 };
 export const CITIES = ['Chennai', 'Bengaluru', 'Hyderabad', 'Mumbai', 'Pune', 'Delhi NCR', 'Kolkata', 'Ahmedabad', 'Kochi', 'Coimbatore', 'Jaipur', 'Chandigarh'];
 export const cityCenter = (city?: string | null) => {
